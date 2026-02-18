@@ -17,6 +17,7 @@ import {
 } from '@/lib/templates';
 import InteractiveCanvas from './InteractiveCanvas';
 import ImageLibrary from './ImageLibrary';
+import { useCloud } from './CloudProvider';
 
 const MIN_IMAGES = 4;
 const MAX_IMAGES = 20;
@@ -70,6 +71,22 @@ const UndoIcon = () => (
 const RedoIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 10H11a5 5 0 0 0 0 10h4" /><path d="M17 6l4 4-4 4" />
+  </svg>
+);
+
+const CloudIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+  </svg>
+);
+const CloudSyncedIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><path d="M9 15l2 2 4-4" />
+  </svg>
+);
+const CloudErrorIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><line x1="12" y1="13" x2="12" y2="16" /><circle cx="12" cy="10" r="0.5" />
   </svg>
 );
 
@@ -139,6 +156,7 @@ export default function MoodboardGenerator() {
   const [colCatFilter, setColCatFilter] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user: cloudUser, syncStatus, signIn: cloudSignIn, sync: cloudSync } = useCloud();
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
 
@@ -469,7 +487,8 @@ export default function MoodboardGenerator() {
     setTimeout(() => setSaveMsg(null), 1500);
     refreshCollection();
     clearDraft().catch(() => {});
-  }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection]);
+    if (cloudUser) cloudSync().catch(() => {});
+  }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection, cloudUser, cloudSync]);
 
   const handleDeleteArtwork = useCallback(async (id: string) => {
     await deleteArtwork(id);
@@ -654,6 +673,7 @@ export default function MoodboardGenerator() {
           <div className="flex items-center gap-2">
             {draftIndicator && <span className="text-[10px] text-neutral-400 animate-pulse">{draftIndicator}</span>}
             {saveMsg && <span className="text-xs text-green-600">{saveMsg}</span>}
+            {cloudUser && syncStatus === 'syncing' && <span className="text-[10px] text-neutral-400 animate-pulse">Syncing</span>}
             <button onClick={saveToCollection} className="flex min-h-[44px] items-center rounded-full border border-neutral-300 px-3 text-[11px] text-neutral-600 hover:border-neutral-500">
               Save
             </button>
@@ -860,9 +880,35 @@ export default function MoodboardGenerator() {
 
         <div className="flex items-center justify-between">
           <p className="text-[11px] uppercase tracking-widest text-neutral-400">Moodboard</p>
-          <button onClick={() => setView('library')} className="text-[11px] text-neutral-400 hover:text-neutral-600">
-            Library
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setView('library')} className="text-[11px] text-neutral-400 hover:text-neutral-600">
+              Library
+            </button>
+            {cloudUser ? (
+              <button
+                onClick={() => cloudSync().catch(() => {})}
+                disabled={syncStatus === 'syncing'}
+                className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 disabled:opacity-40"
+              >
+                {cloudUser.pfpUrl && (
+                  <img src={cloudUser.pfpUrl} alt="" className="h-4 w-4 rounded-full" />
+                )}
+                {syncStatus === 'syncing' ? (
+                  <><Spinner /> Syncing</>
+                ) : syncStatus === 'synced' ? (
+                  <><CloudSyncedIcon /> Synced</>
+                ) : syncStatus === 'error' ? (
+                  <><CloudErrorIcon /> Retry</>
+                ) : (
+                  <><CloudIcon /> Sync</>
+                )}
+              </button>
+            ) : (
+              <button onClick={() => cloudSignIn().catch(() => {})} className="text-[11px] text-neutral-400 hover:text-neutral-600">
+                Sign in
+              </button>
+            )}
+          </div>
         </div>
 
         <input
