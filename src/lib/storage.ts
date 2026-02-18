@@ -12,6 +12,22 @@ export interface CanvasImage {
   naturalHeight: number;
 }
 
+/** Same shape as CanvasImage but without the heavy dataUrl blob. */
+export type LightCanvasImage = Omit<CanvasImage, 'dataUrl'>;
+
+export function stripDataUrls(imgs: CanvasImage[]): LightCanvasImage[] {
+  return imgs.map(({ dataUrl: _, ...rest }) => rest);
+}
+
+export function rehydrateImages(
+  light: LightCanvasImage[],
+  store: Map<string, string>,
+): CanvasImage[] {
+  return light
+    .filter((l) => store.has(l.id))
+    .map((l) => ({ ...l, dataUrl: store.get(l.id)! }));
+}
+
 export type Orientation = 'portrait' | 'landscape' | 'square';
 
 export interface Artwork {
@@ -28,6 +44,8 @@ export interface Artwork {
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Small JPEG data URL for collection grid preview */
+  thumbnail?: string;
 }
 
 export interface TemplateSlot {

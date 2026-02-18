@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { moodboards, images } from '@/lib/schema';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAuth, checkOrigin, originDenied } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
+    if (!checkOrigin(req)) return originDenied();
     const auth = await verifyAuth(req);
     if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    if (!checkOrigin(req)) return originDenied();
     const auth = await verifyAuth(req);
     if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

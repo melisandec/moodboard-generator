@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
+import { rateLimit, checkOrigin, originDenied } from '@/lib/auth';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export async function POST(req: Request) {
   try {
+    if (!checkOrigin(req)) return originDenied();
+    const rl = rateLimit(req, 10);
+    if (rl) return rl;
+
     const pinataJwt = process.env.PINATA_JWT;
     if (!pinataJwt) {
       console.error('cast-image: PINATA_JWT not set');

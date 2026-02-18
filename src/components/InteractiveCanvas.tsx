@@ -176,19 +176,25 @@ export default function InteractiveCanvas({
         </div>
       ))}
 
-      {/* Floating toolbar above selected image */}
-      {selected && (
+      {/* Floating toolbar — flips below image when near the top edge */}
+      {selected && (() => {
+        const nearTop = selected.y / canvasHeight < 0.1;
+        return (
         <div
           className="pointer-events-none absolute"
           style={{
             left: `${(selected.x / canvasWidth) * 100}%`,
-            top: `${(selected.y / canvasHeight) * 100}%`,
+            top: nearTop
+              ? `${((selected.y + selected.height) / canvasHeight) * 100}%`
+              : `${(selected.y / canvasHeight) * 100}%`,
             width: `${(selected.width / canvasWidth) * 100}%`,
             zIndex: topZ,
           }}
         >
           <div
-            className="pointer-events-auto absolute bottom-full left-1/2 mb-1.5 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-2 py-1 shadow-md"
+            className={`pointer-events-auto absolute left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-2 py-1 shadow-md ${
+              nearTop ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
+            }`}
             onPointerDown={(e) => e.stopPropagation()}
           >
             {/* Resize smaller */}
@@ -235,7 +241,8 @@ export default function InteractiveCanvas({
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {images.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">

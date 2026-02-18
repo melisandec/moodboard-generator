@@ -4,12 +4,13 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { sdk } from '@farcaster/miniapp-sdk';
 import {
   loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
-  renderManualMoodboard, renderMoodboardToBlob, extractColors,
+  renderManualMoodboard, renderMoodboardToBlob, extractColors, renderThumbnail,
 } from '@/lib/canvas';
 import {
   saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
   saveDraft, loadDraft, clearDraft, ensureInLibrary, DEFAULT_CATEGORIES,
-  type Artwork, type CanvasImage, type Orientation, type Template, type Draft, type LibraryImage,
+  stripDataUrls, rehydrateImages,
+  type Artwork, type CanvasImage, type LightCanvasImage, type Orientation, type Template, type Draft, type LibraryImage,
 } from '@/lib/storage';
 import {
   CANVAS_DIMS, BUILT_IN_TEMPLATES, applyTemplate, artworkToTemplate,
@@ -137,9 +138,10 @@ export default function MoodboardGenerator() {
   const [showCatRow, setShowCatRow] = useState(false);
   const [newCatDraft, setNewCatDraft] = useState('');
 
-  // Undo / Redo
-  const [undoStack, setUndoStack] = useState<CanvasImage[][]>([]);
-  const [redoStack, setRedoStack] = useState<CanvasImage[][]>([]);
+  // Undo / Redo — lightweight stacks store metadata only; image blobs live in the ref
+  const [undoStack, setUndoStack] = useState<LightCanvasImage[][]>([]);
+  const [redoStack, setRedoStack] = useState<LightCanvasImage[][]>([]);
+  const imageStoreRef = useRef<Map<string, string>>(new Map());
 
   // UI panels
   const [showBgPicker, setShowBgPicker] = useState(false);
@@ -163,6 +165,7 @@ export default function MoodboardGenerator() {
   const [colCatFilter, setColCatFilter] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const manualFileRef = useRef<HTMLInputElement>(null);
   const { user: cloudUser, syncStatus, signIn: cloudSignIn, sync: cloudSync } = useCloud();
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
@@ -260,11 +263,25 @@ export default function MoodboardGenerator() {
   }, []);
 
   // -----------------------------------------------------------------------
+  // Image store — keeps dataUrl blobs keyed by image id, so undo/redo
+  // stacks only hold lightweight metadata (~100 bytes per image vs ~200 KB).
+  // -----------------------------------------------------------------------
+
+  const syncImageStore = useCallback((imgs: CanvasImage[]) => {
+    const store = imageStoreRef.current;
+    for (const img of imgs) {
+      if (!store.has(img.id)) store.set(img.id, img.dataUrl);
+    }
+  }, []);
+
+  useEffect(() => { syncImageStore(canvasImages); }, [canvasImages, syncImageStore]);
+
+  // -----------------------------------------------------------------------
   // Undo / Redo
   // -----------------------------------------------------------------------
 
   const commitSnapshot = useCallback(() => {
-    setUndoStack((prev) => [...prev.slice(-(MAX_HISTORY - 1)), canvasImages]);
+    setUndoStack((prev) => [...prev.slice(-(MAX_HISTORY - 1)), stripDataUrls(canvasImages)]);
     setRedoStack([]);
   }, [canvasImages]);
 
@@ -272,8 +289,8 @@ export default function MoodboardGenerator() {
     setUndoStack((prev) => {
       if (prev.length === 0) return prev;
       const snapshot = prev[prev.length - 1];
-      setRedoStack((r) => [...r, canvasImages]);
-      setCanvasImages(snapshot);
+      setRedoStack((r) => [...r, stripDataUrls(canvasImages)]);
+      setCanvasImages(rehydrateImages(snapshot, imageStoreRef.current));
       return prev.slice(0, -1);
     });
   }, [canvasImages]);
@@ -282,8 +299,8 @@ export default function MoodboardGenerator() {
     setRedoStack((prev) => {
       if (prev.length === 0) return prev;
       const snapshot = prev[prev.length - 1];
-      setUndoStack((u) => [...u, canvasImages]);
-      setCanvasImages(snapshot);
+      setUndoStack((u) => [...u, stripDataUrls(canvasImages)]);
+      setCanvasImages(rehydrateImages(snapshot, imageStoreRef.current));
       return prev.slice(0, -1);
     });
   }, [canvasImages]);
@@ -453,6 +470,42 @@ export default function MoodboardGenerator() {
     setView('manual');
   }, [view, canvasImages, dims, commitSnapshot]);
 
+  // Add images directly to canvas from file picker (manual mode)
+  const handleManualFileAdd = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.files;
+    if (!input || input.length === 0) return;
+    const newFiles = Array.from(input).slice(0, MAX_IMAGES - canvasImages.length);
+    if (newFiles.length === 0) return;
+
+    const processed = await Promise.all(newFiles.map((f) => compressForStorage(f)));
+    const maxZ = canvasImages.length > 0 ? Math.max(...canvasImages.map((i) => i.zIndex)) + 1 : 0;
+
+    const newImgs: CanvasImage[] = processed.map((p, idx) => {
+      const aspect = p.naturalWidth / p.naturalHeight;
+      const w = dims.w * 0.3;
+      const h = w / aspect;
+      return {
+        id: `img-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+        dataUrl: p.dataUrl,
+        x: dims.w * 0.1 + Math.random() * dims.w * 0.5,
+        y: dims.h * 0.1 + Math.random() * dims.h * 0.5,
+        width: w, height: h, rotation: 0, pinned: false,
+        zIndex: maxZ + idx,
+        naturalWidth: p.naturalWidth, naturalHeight: p.naturalHeight,
+      };
+    });
+
+    commitSnapshot();
+    setCanvasImages((prev) => [...prev, ...newImgs]);
+    setProcessedData((prev) => [...prev, ...processed]);
+
+    for (let i = 0; i < processed.length; i++) {
+      ensureInLibrary(processed[i].dataUrl, newFiles[i].name, processed[i].naturalWidth, processed[i].naturalHeight).catch(() => {});
+    }
+
+    if (manualFileRef.current) manualFileRef.current.value = '';
+  }, [canvasImages, dims, commitSnapshot]);
+
   // -----------------------------------------------------------------------
   // Orientation switch
   // -----------------------------------------------------------------------
@@ -486,10 +539,14 @@ export default function MoodboardGenerator() {
       const ex = savedArtworks.find((a) => a.id === artworkId);
       if (ex) createdAt = ex.createdAt;
     }
+
+    let thumbnail: string | undefined;
+    try { thumbnail = await renderThumbnail(canvasImages, dims.w, dims.h, bgColor, imageMargin); } catch { /* non-critical */ }
+
     await saveArtwork({
       id, title: title.trim() || 'Untitled', caption: caption.trim(),
       images: canvasImages, canvasWidth: dims.w, canvasHeight: dims.h,
-      orientation, bgColor, imageMargin, categories,
+      orientation, bgColor, imageMargin, categories, thumbnail,
       pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
       createdAt, updatedAt: now,
     });
@@ -501,9 +558,16 @@ export default function MoodboardGenerator() {
     if (cloudUser) cloudSync().then(() => refreshCollection()).catch(() => {});
   }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection, cloudUser, cloudSync]);
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const confirmDeleteArtwork = useCallback((id: string) => {
+    setDeleteConfirmId(id);
+  }, []);
+
   const handleDeleteArtwork = useCallback(async (id: string) => {
     await deleteArtwork(id);
     setSavedArtworks((p) => p.filter((a) => a.id !== id));
+    setDeleteConfirmId(null);
   }, []);
 
   const togglePinArtwork = useCallback(async (aw: Artwork) => {
@@ -788,6 +852,27 @@ export default function MoodboardGenerator() {
           <button onClick={() => setView('library')} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600">
             Library
           </button>
+
+          <div className="h-5 w-px bg-neutral-200" />
+
+          <button
+            onClick={() => manualFileRef.current?.click()}
+            className="flex h-8 items-center gap-1 rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add
+          </button>
+          <input
+            ref={manualFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            onChange={handleManualFileAdd}
+            className="hidden"
+            aria-label="Add images to canvas"
+          />
         </div>
 
         {/* BG color picker (expandable) */}
@@ -1090,57 +1175,101 @@ export default function MoodboardGenerator() {
               </select>
             </div>
 
-            {/* Artwork list */}
-            <div className="flex flex-col gap-1">
+            {/* Artwork grid */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {filteredArtworks.map((aw) => (
-                <div key={aw.id} className="flex items-center gap-1 border-b border-neutral-100 py-2.5">
-                  {/* Pin */}
-                  <button
-                    onClick={() => togglePinArtwork(aw)}
-                    className={`flex h-10 w-8 flex-shrink-0 items-center justify-center ${aw.pinned ? 'text-neutral-500' : 'text-neutral-200 hover:text-neutral-400'}`}
-                    aria-label={aw.pinned ? 'Unpin' : 'Pin'}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill={aw.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
-                    </svg>
-                  </button>
-
-                  {/* Info */}
-                  <button onClick={() => loadArtworkForEditing(aw)} className="min-h-[44px] flex-1 text-left">
-                    <p className="text-sm text-neutral-700">{aw.title}</p>
-                    <p className="text-[11px] text-neutral-400">
-                      {aw.images.length} image{aw.images.length !== 1 ? 's' : ''} · {new Date(aw.updatedAt).toLocaleDateString()}
-                    </p>
-                    {(aw.categories ?? []).length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap gap-0.5">
-                        {(aw.categories ?? []).map((c) => (
-                          <span key={c} className="rounded-sm bg-neutral-100 px-1 text-[9px] text-neutral-500">{c}</span>
-                        ))}
+                <div key={aw.id} className="group relative overflow-hidden rounded-md border border-neutral-100">
+                  {/* Thumbnail / preview */}
+                  <button onClick={() => loadArtworkForEditing(aw)} className="block w-full text-left">
+                    {aw.thumbnail ? (
+                      <img src={aw.thumbnail} alt={aw.title} className="aspect-[3/4] w-full object-cover" />
+                    ) : (
+                      <div
+                        className="flex aspect-[3/4] w-full items-center justify-center"
+                        style={{ backgroundColor: aw.bgColor || '#f5f5f4' }}
+                      >
+                        <span className="text-[10px] text-neutral-400">{aw.images.length} images</span>
                       </div>
                     )}
+                    <div className="px-2 py-1.5">
+                      <p className="truncate text-xs font-medium text-neutral-700">{aw.title}</p>
+                      <p className="text-[10px] text-neutral-400">{new Date(aw.updatedAt).toLocaleDateString()}</p>
+                      {(aw.categories ?? []).length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-0.5">
+                          {(aw.categories ?? []).slice(0, 2).map((c) => (
+                            <span key={c} className="rounded-sm bg-neutral-100 px-1 text-[8px] text-neutral-500">{c}</span>
+                          ))}
+                          {(aw.categories ?? []).length > 2 && (
+                            <span className="text-[8px] text-neutral-400">+{(aw.categories ?? []).length - 2}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </button>
 
-                  {/* Actions */}
-                  <button onClick={() => duplicateArtwork(aw)} className="flex h-10 w-10 items-center justify-center text-neutral-300 hover:text-neutral-500" aria-label="Duplicate">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                  <button onClick={() => handleDeleteArtwork(aw.id)} className="flex h-10 w-10 items-center justify-center text-neutral-300 hover:text-red-500" aria-label="Delete artwork">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
+                  {/* Pin indicator */}
+                  {aw.pinned && (
+                    <div className="absolute left-1.5 top-1.5 rounded-full bg-white/80 p-1 shadow-sm">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-neutral-600">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Hover actions */}
+                  <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); togglePinArtwork(aw); }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-500 shadow-sm hover:text-neutral-700"
+                      aria-label={aw.pinned ? 'Unpin' : 'Pin'}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill={aw.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); duplicateArtwork(aw); }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-500 shadow-sm hover:text-neutral-700"
+                      aria-label="Duplicate"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); confirmDeleteArtwork(aw.id); }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-400 shadow-sm hover:text-red-500"
+                      aria-label="Delete artwork"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
-
-              {filteredArtworks.length === 0 && colSearch && (
-                <p className="py-4 text-center text-[11px] text-neutral-400">No matching artworks</p>
-              )}
             </div>
+
+            {filteredArtworks.length === 0 && colSearch && (
+              <p className="py-4 text-center text-[11px] text-neutral-400">No matching artworks</p>
+            )}
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setDeleteConfirmId(null)}>
+          <div className="mx-4 w-full max-w-xs rounded-lg bg-white p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm text-neutral-700">Delete this moodboard?</p>
+            <p className="mt-1 text-[11px] text-neutral-400">This action cannot be undone.</p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700">Cancel</button>
+              <button onClick={() => handleDeleteArtwork(deleteConfirmId)} className="rounded-md bg-red-50 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -142,7 +142,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
     try {
       const localArtworks = localOverride ?? await loadArtworks();
       if (localArtworks.length > 0) {
-        await pushToCloud(localArtworks, authFetch);
+        await pushToCloud(localArtworks, authFetch, lastSyncAt);
       }
 
       const cloudArtworks = await pullFromCloud(authFetch);
@@ -162,7 +162,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
     } finally {
       syncLock.current = false;
     }
-  }, [user]);
+  }, [user, lastSyncAt]);
 
   useEffect(() => {
     if (user && pendingAutoSync.current) {

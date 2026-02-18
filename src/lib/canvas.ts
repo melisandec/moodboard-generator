@@ -233,6 +233,53 @@ export function createInitialPlacements(
   });
 }
 
+/**
+ * Render a tiny thumbnail (~200px wide) of the moodboard for collection previews.
+ */
+export async function renderThumbnail(
+  images: CanvasImage[],
+  cw: number,
+  ch: number,
+  bgColor = '#f5f5f4',
+  margin = false,
+): Promise<string> {
+  const scale = Math.min(1, 200 / cw);
+  const w = Math.round(cw * scale);
+  const h = Math.round(ch * scale);
+
+  const loaded = await Promise.all(images.map((im) => loadImageFromUrl(im.dataUrl)));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, w, h);
+
+  const sorted = images
+    .map((im, i) => ({ ...im, el: loaded[i] }))
+    .sort((a, b) => a.zIndex - b.zIndex);
+
+  const borderPx = margin ? Math.max(1, w * 0.003) : 0;
+
+  for (const im of sorted) {
+    ctx.save();
+    const sx = im.x * scale;
+    const sy = im.y * scale;
+    const sw = im.width * scale;
+    const sh = im.height * scale;
+    ctx.translate(sx + sw / 2, sy + sh / 2);
+    ctx.rotate((im.rotation * Math.PI) / 180);
+    if (borderPx > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-sw / 2 - borderPx, -sh / 2 - borderPx, sw + borderPx * 2, sh + borderPx * 2);
+    }
+    ctx.drawImage(im.el, -sw / 2, -sh / 2, sw, sh);
+    ctx.restore();
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.6);
+}
+
 export function compressForUpload(
   dataUrl: string,
   maxDim = 2048,

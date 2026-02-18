@@ -26,6 +26,33 @@ interface CloudCanvasImage {
   naturalHeight: number;
 }
 
+const MAX_CONCURRENCY = 3;
+
+async function runConcurrent<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency = MAX_CONCURRENCY,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  let idx = 0;
+
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      try {
+        const value = await tasks[i]();
+        results[i] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+
 export async function registerUser(user: CloudUser, fetchFn: FetchFn): Promise<void> {
   const res = await fetchFn('/api/user', {
     method: 'POST',
@@ -82,20 +109,40 @@ function toCloudCanvas(imgs: CanvasImage[]): CloudCanvasImage[] {
   }));
 }
 
-export async function pushToCloud(artworks: Artwork[], fetchFn: FetchFn): Promise<void> {
-  const uploadedHashes = new Set<string>();
+/**
+ * Push artworks to cloud. Supports incremental sync via `since` — when
+ * provided, only artworks updated after that timestamp are pushed.
+ */
+export async function pushToCloud(
+  artworks: Artwork[],
+  fetchFn: FetchFn,
+  since?: string | null,
+): Promise<void> {
+  let toPush = artworks;
+  if (since) {
+    toPush = artworks.filter((a) => a.updatedAt > since);
+  }
+  if (toPush.length === 0) return;
 
-  for (const aw of artworks) {
+  // Collect unique images across all boards being pushed
+  const uniqueImages = new Map<string, { dataUrl: string; nw: number; nh: number }>();
+  for (const aw of toPush) {
     for (const img of aw.images) {
       const hash = imageHash(img.dataUrl);
-      if (!uploadedHashes.has(hash)) {
-        await uploadImage(img.dataUrl, hash, `image-${hash}`, img.naturalWidth, img.naturalHeight, fetchFn);
-        uploadedHashes.add(hash);
+      if (!uniqueImages.has(hash)) {
+        uniqueImages.set(hash, { dataUrl: img.dataUrl, nw: img.naturalWidth, nh: img.naturalHeight });
       }
     }
   }
 
-  const boards = artworks.map((aw) => ({
+  // Upload images in parallel (max concurrency)
+  const uploadTasks = [...uniqueImages.entries()].map(
+    ([hash, { dataUrl, nw, nh }]) =>
+      () => uploadImage(dataUrl, hash, `image-${hash}`, nw, nh, fetchFn),
+  );
+  await runConcurrent(uploadTasks);
+
+  const boards = toPush.map((aw) => ({
     id: aw.id,
     title: aw.title,
     caption: aw.caption,
@@ -132,6 +179,12 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+async function fetchImageAsDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
+}
+
 export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
   const res = await fetchFn('/api/sync');
   if (!res.ok) {
@@ -150,34 +203,45 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
     imageMap: Record<string, { url: string; naturalWidth: number; naturalHeight: number }>;
   };
 
-  const artworks: Artwork[] = [];
-
+  // Pre-fetch all unique images in parallel
+  const uniqueHashes = new Set<string>();
   for (const board of boards) {
-    const canvasImages: CanvasImage[] = [];
-
     for (const ci of board.canvasState) {
-      const info = imageMap[ci.imageHash];
-      if (!info) continue;
-
-      try {
-        const imgRes = await fetch(info.url);
-        const blob = await imgRes.blob();
-        const dataUrl = await blobToDataUrl(blob);
-        canvasImages.push({
-          id: ci.id, dataUrl,
-          x: ci.x, y: ci.y, width: ci.width, height: ci.height,
-          rotation: ci.rotation, pinned: ci.pinned, zIndex: ci.zIndex,
-          naturalWidth: ci.naturalWidth, naturalHeight: ci.naturalHeight,
-        });
-      } catch (err) {
-        console.error('Failed to fetch IPFS image:', info.url, err);
-      }
+      if (imageMap[ci.imageHash]) uniqueHashes.add(ci.imageHash);
     }
+  }
 
-    const toIso = (v: string | number) =>
-      typeof v === 'string' ? v : new Date(v).toISOString();
+  const dataUrlCache = new Map<string, string>();
+  const fetchTasks = [...uniqueHashes].map(
+    (hash) => async () => {
+      const url = imageMap[hash].url;
+      const dataUrl = await fetchImageAsDataUrl(url);
+      dataUrlCache.set(hash, dataUrl);
+    },
+  );
+  await runConcurrent(fetchTasks);
 
-    artworks.push({
+  const toIso = (v: string | number) =>
+    typeof v === 'string' ? v : new Date(v).toISOString();
+
+  return boards.map((board) => {
+    const canvasImages: CanvasImage[] = board.canvasState
+      .filter((ci) => dataUrlCache.has(ci.imageHash))
+      .map((ci) => ({
+        id: ci.id,
+        dataUrl: dataUrlCache.get(ci.imageHash)!,
+        x: ci.x,
+        y: ci.y,
+        width: ci.width,
+        height: ci.height,
+        rotation: ci.rotation,
+        pinned: ci.pinned,
+        zIndex: ci.zIndex,
+        naturalWidth: ci.naturalWidth,
+        naturalHeight: ci.naturalHeight,
+      }));
+
+    return {
       id: board.id,
       title: board.title,
       caption: board.caption ?? '',
@@ -191,8 +255,6 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
       pinned: board.pinned ?? false,
       createdAt: toIso(board.createdAt),
       updatedAt: toIso(board.updatedAt),
-    });
-  }
-
-  return artworks;
+    };
+  });
 }
