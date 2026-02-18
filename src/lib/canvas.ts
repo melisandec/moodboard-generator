@@ -233,6 +233,32 @@ export function createInitialPlacements(
   });
 }
 
+export function compressForUpload(
+  dataUrl: string,
+  maxDim = 2048,
+  quality = 0.82,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d')!.drawImage(img, 0, 0, w, h);
+      c.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('compression failed'))),
+        'image/jpeg',
+        quality,
+      );
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
 function loadImageFromUrl(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const el = new Image();

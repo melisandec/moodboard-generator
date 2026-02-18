@@ -1,5 +1,6 @@
 import type { Artwork, CanvasImage } from './storage';
 import { imageHash } from './storage';
+import { compressForUpload } from './canvas';
 
 export interface CloudUser {
   fid: string;
@@ -37,16 +38,6 @@ export async function registerUser(user: CloudUser, fetchFn: FetchFn): Promise<v
   }
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
-  const commaIdx = dataUrl.indexOf(',');
-  const header = dataUrl.substring(0, commaIdx);
-  const raw = atob(dataUrl.substring(commaIdx + 1));
-  const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return new Blob([bytes], { type: contentType });
-}
-
 async function uploadImage(
   dataUrl: string,
   hash: string,
@@ -55,10 +46,10 @@ async function uploadImage(
   naturalHeight: number,
   fetchFn: FetchFn,
 ): Promise<string> {
-  const blob = dataUrlToBlob(dataUrl);
+  const blob = await compressForUpload(dataUrl);
 
   const formData = new FormData();
-  formData.append('file', blob, filename || `image-${hash}.png`);
+  formData.append('file', blob, filename || `image-${hash}.jpg`);
   formData.append('hash', hash);
   formData.append('naturalWidth', String(naturalWidth));
   formData.append('naturalHeight', String(naturalHeight));
