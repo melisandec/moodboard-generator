@@ -21,9 +21,9 @@
     "ogDescription": "Create and share moodboards",
     "ogImageUrl": "https://moodboard-generator-phi.vercel.app/og.png",
     "castShareUrl": "https://moodboard-generator-phi.vercel.app/cast-share.png",
-    "primaryCategory": "art",
+    "primaryCategory": "art-creativity",
     "webhookUrl": "https://moodboard-generator-phi.vercel.app/api/webhook",
-    "canonicalDomain": "https://moodboard-generator-phi.vercel.app",
+    "canonicalDomain": "moodboard-generator-phi.vercel.app",
     "tags": ["moodboard", "collage", "art", "farcaster"]
   }
 }
