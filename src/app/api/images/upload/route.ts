@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { images } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
+import { verifyAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
-    const { fid, hash, data, contentType, filename, naturalWidth, naturalHeight, tags } =
+    const auth = await verifyAuth(req);
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const fid = String(auth.fid);
+    const { hash, data, contentType, filename, naturalWidth, naturalHeight, tags } =
       await req.json();
 
-    if (!fid || !hash || !data) {
+    if (!hash || !data) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
 
     await db.insert(images).values({
       hash,
-      fid: String(fid),
+      fid,
       url,
       filename: filename || '',
       naturalWidth: naturalWidth ?? 0,

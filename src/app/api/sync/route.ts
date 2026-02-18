@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { moodboards, images } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
+import { verifyAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
-    const { fid, boards } = await req.json();
-    if (!fid || !Array.isArray(boards)) {
-      return NextResponse.json({ error: 'Missing fid or boards' }, { status: 400 });
+    const auth = await verifyAuth(req);
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const fid = String(auth.fid);
+    const { boards } = await req.json();
+
+    if (!Array.isArray(boards)) {
+      return NextResponse.json({ error: 'Missing boards' }, { status: 400 });
     }
 
     const db = getDb();
@@ -37,7 +43,7 @@ export async function POST(req: Request) {
       } else {
         await db.insert(moodboards).values({
           id: board.id,
-          fid: String(fid),
+          fid,
           title: board.title,
           caption: board.caption ?? '',
           categories: board.categories ?? [],
@@ -64,12 +70,10 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const fid = searchParams.get('fid');
-    if (!fid) {
-      return NextResponse.json({ error: 'Missing fid' }, { status: 400 });
-    }
+    const auth = await verifyAuth(req);
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const fid = String(auth.fid);
     const db = getDb();
 
     const boards = await db.select().from(moodboards).where(eq(moodboards.fid, fid));

@@ -12,6 +12,7 @@ interface CloudContextValue {
   user: CloudUser | null;
   syncStatus: SyncStatus;
   lastSyncAt: string | null;
+  isMiniApp: boolean;
   signIn: () => Promise<void>;
   signOut: () => void;
   sync: (localOverride?: Artwork[]) => Promise<void>;
@@ -21,6 +22,7 @@ const CloudContext = createContext<CloudContextValue>({
   user: null,
   syncStatus: 'idle',
   lastSyncAt: null,
+  isMiniApp: false,
   signIn: async () => {},
   signOut: () => {},
   sync: async () => {},
@@ -33,52 +35,69 @@ export function useCloud() {
 const STORAGE_USER_KEY = 'moodboard-cloud-user';
 const STORAGE_SYNC_KEY = 'moodboard-last-sync';
 
+async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await sdk.quickAuth.fetch(input, init);
+  } catch {
+    return fetch(input, init);
+  }
+}
+
 export function CloudProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CloudUser | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [isMiniApp, setIsMiniApp] = useState(false);
   const syncLock = useRef(false);
+  const initDone = useRef(false);
 
   useEffect(() => {
+    if (initDone.current) return;
+    initDone.current = true;
+
     try {
       const stored = localStorage.getItem(STORAGE_USER_KEY);
       if (stored) setUser(JSON.parse(stored));
-    } catch { /* ignore */ }
-
-    try {
       const ts = localStorage.getItem(STORAGE_SYNC_KEY);
       if (ts) setLastSyncAt(ts);
     } catch { /* ignore */ }
 
-    const timer = setTimeout(() => {
+    (async () => {
       try {
-        const ctx = sdk.context as { user?: { fid?: number; username?: string; pfpUrl?: string } } | undefined;
-        if (ctx?.user?.fid) {
+        const inMiniApp = await sdk.isInMiniApp();
+        setIsMiniApp(inMiniApp);
+        if (!inMiniApp) return;
+
+        const context = await sdk.context;
+        if (context?.user?.fid) {
           const cloudUser: CloudUser = {
-            fid: String(ctx.user.fid),
-            username: ctx.user.username ?? '',
-            pfpUrl: ctx.user.pfpUrl ?? '',
+            fid: String(context.user.fid),
+            username: context.user.username ?? '',
+            pfpUrl: context.user.pfpUrl ?? '',
           };
           setUser(cloudUser);
           localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(cloudUser));
-          registerUser(cloudUser).catch(() => {});
+          registerUser(cloudUser, authFetch).catch(() => {});
         }
-      } catch { /* not in Farcaster context */ }
-    }, 600);
-
-    return () => clearTimeout(timer);
+      } catch {
+        /* not in Farcaster context */
+      }
+    })();
   }, []);
 
   const signIn = useCallback(async () => {
     try {
-      const ctx = sdk.context as { user?: { fid?: number; username?: string; pfpUrl?: string } } | undefined;
-      if (ctx?.user?.fid) {
+      const inMiniApp = await sdk.isInMiniApp();
+      if (!inMiniApp) return;
+
+      const context = await sdk.context;
+      if (context?.user?.fid) {
         const cloudUser: CloudUser = {
-          fid: String(ctx.user.fid),
-          username: ctx.user.username ?? '',
-          pfpUrl: ctx.user.pfpUrl ?? '',
+          fid: String(context.user.fid),
+          username: context.user.username ?? '',
+          pfpUrl: context.user.pfpUrl ?? '',
         };
-        await registerUser(cloudUser);
+        await registerUser(cloudUser, authFetch);
         setUser(cloudUser);
         localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(cloudUser));
       }
@@ -103,10 +122,10 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
     try {
       const localArtworks = localOverride ?? await loadArtworks();
       if (localArtworks.length > 0) {
-        await pushToCloud(user.fid, localArtworks);
+        await pushToCloud(localArtworks, authFetch);
       }
 
-      const cloudArtworks = await pullFromCloud(user.fid);
+      const cloudArtworks = await pullFromCloud(authFetch);
       for (const aw of cloudArtworks) {
         await saveArtwork(aw);
       }
@@ -124,7 +143,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <CloudContext.Provider value={{ user, syncStatus, lastSyncAt, signIn, signOut, sync }}>
+    <CloudContext.Provider value={{ user, syncStatus, lastSyncAt, isMiniApp, signIn, signOut, sync }}>
       {children}
     </CloudContext.Provider>
   );

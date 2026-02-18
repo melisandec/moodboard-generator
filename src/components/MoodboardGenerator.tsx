@@ -165,7 +165,7 @@ export default function MoodboardGenerator() {
   // -----------------------------------------------------------------------
 
   useEffect(() => {
-    sdk.actions.ready({ disableNativeGestures: true });
+    sdk.actions.ready({ disableNativeGestures: true }).catch(() => {});
     loadArtworks()
       .then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
       .catch(() => {});

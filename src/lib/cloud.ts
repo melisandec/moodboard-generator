@@ -9,6 +9,8 @@ export interface CloudUser {
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
 
+type FetchFn = typeof fetch;
+
 interface CloudCanvasImage {
   id: string;
   imageHash: string;
@@ -23,32 +25,32 @@ interface CloudCanvasImage {
   naturalHeight: number;
 }
 
-export async function registerUser(user: CloudUser): Promise<void> {
-  const res = await fetch('/api/user', {
+export async function registerUser(user: CloudUser, fetchFn: FetchFn): Promise<void> {
+  const res = await fetchFn('/api/user', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fid: user.fid, username: user.username, pfpUrl: user.pfpUrl }),
+    body: JSON.stringify({ username: user.username, pfpUrl: user.pfpUrl }),
   });
   if (!res.ok) throw new Error('Failed to register user');
 }
 
 async function uploadImage(
-  fid: string,
   dataUrl: string,
   hash: string,
   filename: string,
   naturalWidth: number,
   naturalHeight: number,
+  fetchFn: FetchFn,
 ): Promise<string> {
   const commaIdx = dataUrl.indexOf(',');
   const header = dataUrl.substring(0, commaIdx);
   const data = dataUrl.substring(commaIdx + 1);
   const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
 
-  const res = await fetch('/api/images/upload', {
+  const res = await fetchFn('/api/images/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fid, hash, data, contentType, filename, naturalWidth, naturalHeight }),
+    body: JSON.stringify({ hash, data, contentType, filename, naturalWidth, naturalHeight }),
   });
   if (!res.ok) throw new Error('Image upload failed');
   const { url } = await res.json();
@@ -71,14 +73,14 @@ function toCloudCanvas(imgs: CanvasImage[]): CloudCanvasImage[] {
   }));
 }
 
-export async function pushToCloud(fid: string, artworks: Artwork[]): Promise<void> {
+export async function pushToCloud(artworks: Artwork[], fetchFn: FetchFn): Promise<void> {
   const uploadedHashes = new Set<string>();
 
   for (const aw of artworks) {
     for (const img of aw.images) {
       const hash = imageHash(img.dataUrl);
       if (!uploadedHashes.has(hash)) {
-        await uploadImage(fid, img.dataUrl, hash, `image-${hash}`, img.naturalWidth, img.naturalHeight);
+        await uploadImage(img.dataUrl, hash, `image-${hash}`, img.naturalWidth, img.naturalHeight, fetchFn);
         uploadedHashes.add(hash);
       }
     }
@@ -101,10 +103,10 @@ export async function pushToCloud(fid: string, artworks: Artwork[]): Promise<voi
     syncVersion: 1,
   }));
 
-  const res = await fetch('/api/sync', {
+  const res = await fetchFn('/api/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fid, boards }),
+    body: JSON.stringify({ boards }),
   });
   if (!res.ok) throw new Error('Sync push failed');
 }
@@ -118,8 +120,8 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export async function pullFromCloud(fid: string): Promise<Artwork[]> {
-  const res = await fetch(`/api/sync?fid=${encodeURIComponent(fid)}`);
+export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
+  const res = await fetchFn('/api/sync');
   if (!res.ok) throw new Error('Sync pull failed');
 
   const { boards, imageMap } = await res.json() as {
