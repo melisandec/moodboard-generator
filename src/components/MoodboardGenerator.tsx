@@ -542,11 +542,28 @@ export default function MoodboardGenerator() {
   // Export helpers
   // -----------------------------------------------------------------------
 
-  const downloadUrl = useCallback((url: string) => {
+  const saveImage = useCallback(async (dataUrl: string) => {
+    const filename = `${title.trim().replace(/\s+/g, '-').toLowerCase() || 'moodboard'}.png`;
+
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return;
+      }
+    } catch {
+      // share cancelled or unsupported — fall through to download
+    }
+
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.trim().replace(/\s+/g, '-').toLowerCase() || 'moodboard'}.png`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }, [title]);
 
   const printUrl = useCallback((url: string) => {
@@ -561,25 +578,52 @@ export default function MoodboardGenerator() {
   const castToFarcaster = useCallback(async () => {
     let text = title.trim();
     if (caption.trim()) text += `\n\n${caption.trim()}`;
+
+    let imageUrl: string | undefined;
     try {
-      await sdk.actions.composeCast({
-        text,
-        embeds: ['https://moodboard-generator-phi.vercel.app'],
-      });
+      const dataUrl =
+        view === 'manual'
+          ? await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin)
+          : moodboardUrl;
+
+      if (dataUrl) {
+        const commaIdx = dataUrl.indexOf(',');
+        const header = dataUrl.substring(0, commaIdx);
+        const base64 = dataUrl.substring(commaIdx + 1);
+        const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
+
+        const res = await fetch('/api/cast-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64, contentType }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          imageUrl = json.url;
+        }
+      }
     } catch {
-      window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`, '_blank');
+      // upload failed — fall back to app URL embed
+    }
+
+    const embed = imageUrl || 'https://moodboard-generator-phi.vercel.app';
+    try {
+      await sdk.actions.composeCast({ text, embeds: [embed] });
+    } catch {
+      const embedParam = imageUrl ? `&embeds[]=${encodeURIComponent(imageUrl)}` : '';
+      window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}${embedParam}`, '_blank');
     }
     clearDraft().catch(() => {});
-  }, [title, caption]);
+  }, [title, caption, view, canvasImages, dims, bgColor, imageMargin, moodboardUrl]);
 
-  const downloadAuto = useCallback(() => { if (moodboardUrl) downloadUrl(moodboardUrl); }, [moodboardUrl, downloadUrl]);
+  const downloadAuto = useCallback(() => { if (moodboardUrl) saveImage(moodboardUrl); }, [moodboardUrl, saveImage]);
   const printAuto = useCallback(() => { if (moodboardUrl) printUrl(moodboardUrl); }, [moodboardUrl, printUrl]);
 
   const downloadManual = useCallback(async () => {
     const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
-    downloadUrl(url);
+    saveImage(url);
     clearDraft().catch(() => {});
-  }, [canvasImages, title, caption, dims, bgColor, imageMargin, downloadUrl]);
+  }, [canvasImages, title, caption, dims, bgColor, imageMargin, saveImage]);
 
   const printManual = useCallback(async () => {
     const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
