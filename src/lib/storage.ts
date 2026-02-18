@@ -165,12 +165,18 @@ export const deleteLibraryImage = (id: string) => idbDelete('library', id);
 
 export function imageHash(dataUrl: string): string {
   const comma = dataUrl.indexOf(',');
-  const sample = dataUrl.substring(comma + 1, comma + 2001);
-  let h = 0;
-  for (let i = 0; i < sample.length; i++) {
-    h = ((h << 5) - h + sample.charCodeAt(i)) | 0;
+  const payload = dataUrl.substring(comma + 1);
+  const len = payload.length;
+  const step = Math.max(1, Math.floor(len / 8000));
+  let h1 = 0x811c9dc5;
+  let h2 = 0;
+  for (let i = 0; i < len; i += step) {
+    h1 = (h1 ^ payload.charCodeAt(i)) * 0x01000193;
+    h2 = ((h2 << 5) - h2 + payload.charCodeAt(i)) | 0;
   }
-  return `lib-${(h >>> 0).toString(36)}`;
+  h1 = ((h1 ^ payload.charCodeAt(len - 1)) * 0x01000193) >>> 0;
+  h2 = h2 >>> 0;
+  return `lib-${h1.toString(36)}-${h2.toString(36)}-${len.toString(36)}`;
 }
 
 export async function ensureInLibrary(

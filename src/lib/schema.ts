@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   fid: text('fid').primaryKey(),
@@ -23,7 +23,10 @@ export const moodboards = sqliteTable('moodboards', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   syncVersion: integer('sync_version').notNull().default(1),
-});
+}, (table) => [
+  index('moodboards_fid_idx').on(table.fid),
+  index('moodboards_updated_idx').on(table.fid, table.updatedAt),
+]);
 
 export const images = sqliteTable('images', {
   hash: text('hash').primaryKey(),
@@ -34,7 +37,9 @@ export const images = sqliteTable('images', {
   naturalHeight: integer('natural_height').notNull(),
   tags: text('tags', { mode: 'json' }).notNull().$type<string[]>(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-});
+}, (table) => [
+  index('images_fid_idx').on(table.fid),
+]);
 
 export interface CloudCanvasImage {
   id: string;

@@ -35,14 +35,30 @@ export function useCloud() {
 const STORAGE_USER_KEY = 'moodboard-cloud-user';
 const STORAGE_SYNC_KEY = 'moodboard-last-sync';
 
+let _isMiniApp: boolean | null = null;
+
 async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  try {
-    const res = await sdk.quickAuth.fetch(input, init);
-    return res;
-  } catch (err) {
-    console.warn('quickAuth.fetch failed, falling back to plain fetch:', err);
-    return fetch(input, init);
+  if (_isMiniApp === null) {
+    try { _isMiniApp = await sdk.isInMiniApp(); } catch { _isMiniApp = false; }
   }
+
+  if (_isMiniApp) {
+    try {
+      return await sdk.quickAuth.fetch(input, init);
+    } catch (err) {
+      console.error('quickAuth.fetch error:', err);
+      throw new Error('Authentication failed — please reopen the app from Warpcast');
+    }
+  }
+
+  const { token } = await sdk.quickAuth.getToken().catch(() => ({ token: null }));
+  if (token) {
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  }
+
+  throw new Error('Not authenticated — open the app from Warpcast to sign in');
 }
 
 export function CloudProvider({ children }: { children: React.ReactNode }) {

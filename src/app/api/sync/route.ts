@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { moodboards, images } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
@@ -12,30 +12,34 @@ export async function POST(req: Request) {
     const fid = String(auth.fid);
     const { boards } = await req.json();
 
-    if (!Array.isArray(boards)) {
-      return NextResponse.json({ error: 'Missing boards' }, { status: 400 });
+    if (!Array.isArray(boards) || boards.length > 100) {
+      return NextResponse.json({ error: 'Invalid boards (must be array, max 100)' }, { status: 400 });
     }
 
     const db = getDb();
 
     for (const board of boards) {
-      const existing = await db.select().from(moodboards).where(eq(moodboards.id, board.id)).get();
+      if (!board.id || !board.title || !board.canvasState) continue;
+
+      const existing = await db.select().from(moodboards)
+        .where(and(eq(moodboards.id, board.id), eq(moodboards.fid, fid)))
+        .get();
 
       if (existing) {
         if ((board.syncVersion ?? 1) >= (existing.syncVersion ?? 1)) {
           await db.update(moodboards)
             .set({
-              title: board.title,
-              caption: board.caption ?? '',
-              categories: board.categories ?? [],
+              title: String(board.title).slice(0, 200),
+              caption: String(board.caption ?? '').slice(0, 1000),
+              categories: Array.isArray(board.categories) ? board.categories.slice(0, 20) : [],
               canvasState: board.canvasState,
-              canvasWidth: board.canvasWidth,
-              canvasHeight: board.canvasHeight,
-              background: board.background ?? '#f5f5f4',
-              orientation: board.orientation ?? 'portrait',
-              margin: board.margin ?? false,
-              pinned: board.pinned ?? false,
-              updatedAt: new Date(board.updatedAt),
+              canvasWidth: Number(board.canvasWidth) || 1080,
+              canvasHeight: Number(board.canvasHeight) || 1527,
+              background: String(board.background ?? '#f5f5f4').slice(0, 20),
+              orientation: String(board.orientation ?? 'portrait'),
+              margin: !!board.margin,
+              pinned: !!board.pinned,
+              updatedAt: new Date(board.updatedAt || Date.now()),
               syncVersion: (existing.syncVersion ?? 1) + 1,
             })
             .where(eq(moodboards.id, board.id));
@@ -44,18 +48,18 @@ export async function POST(req: Request) {
         await db.insert(moodboards).values({
           id: board.id,
           fid,
-          title: board.title,
-          caption: board.caption ?? '',
-          categories: board.categories ?? [],
+          title: String(board.title).slice(0, 200),
+          caption: String(board.caption ?? '').slice(0, 1000),
+          categories: Array.isArray(board.categories) ? board.categories.slice(0, 20) : [],
           canvasState: board.canvasState,
-          canvasWidth: board.canvasWidth ?? 1080,
-          canvasHeight: board.canvasHeight ?? 1527,
-          background: board.background ?? '#f5f5f4',
-          orientation: board.orientation ?? 'portrait',
-          margin: board.margin ?? false,
-          pinned: board.pinned ?? false,
-          createdAt: new Date(board.createdAt),
-          updatedAt: new Date(board.updatedAt),
+          canvasWidth: Number(board.canvasWidth) || 1080,
+          canvasHeight: Number(board.canvasHeight) || 1527,
+          background: String(board.background ?? '#f5f5f4').slice(0, 20),
+          orientation: String(board.orientation ?? 'portrait'),
+          margin: !!board.margin,
+          pinned: !!board.pinned,
+          createdAt: new Date(board.createdAt || Date.now()),
+          updatedAt: new Date(board.updatedAt || Date.now()),
           syncVersion: 1,
         });
       }

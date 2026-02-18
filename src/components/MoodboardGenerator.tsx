@@ -90,14 +90,18 @@ const CloudErrorIcon = () => (
   </svg>
 );
 
-function ActionBar({ onDownload, onPrint, onCast }: { onDownload: () => void; onPrint: () => void; onCast: () => void }) {
-  const btn = 'flex min-h-[44px] min-w-[44px] flex-col items-center gap-1 text-neutral-500 transition-colors hover:text-neutral-700';
+function ActionBar({ onDownload, onPrint, onCast, castStatus }: { onDownload: () => void; onPrint: () => void; onCast: () => void; castStatus?: string | null }) {
+  const btn = 'flex min-h-[44px] min-w-[44px] flex-col items-center gap-1 text-neutral-500 transition-colors hover:text-neutral-700 disabled:opacity-40';
+  const isCasting = !!castStatus;
   return (
     <div className="sticky bottom-0 border-t border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur-sm">
+      {isCasting && (
+        <p className="mb-2 text-center text-[11px] text-neutral-500 animate-pulse">{castStatus}</p>
+      )}
       <div className="mx-auto flex max-w-lg items-center justify-center gap-10">
         <button onClick={onDownload} className={btn}><DownloadIcon /><span className="text-[11px]">Save</span></button>
         <button onClick={onPrint} className={btn}><PrintIcon /><span className="text-[11px]">Print</span></button>
-        <button onClick={onCast} className={btn}><CastIcon /><span className="text-[11px]">Cast</span></button>
+        <button onClick={onCast} disabled={isCasting} className={btn}><CastIcon /><span className="text-[11px]">{isCasting ? '…' : 'Cast'}</span></button>
       </div>
     </div>
   );
@@ -147,6 +151,9 @@ export default function MoodboardGenerator() {
   // Auto-save draft
   const [draftIndicator, setDraftIndicator] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
+
+  // Cast state
+  const [castStatus, setCastStatus] = useState<string | null>(null);
 
   // Collection
   const [savedArtworks, setSavedArtworks] = useState<Artwork[]>([]);
@@ -583,7 +590,9 @@ export default function MoodboardGenerator() {
     let text = title.trim();
     if (caption.trim()) text += `\n\n${caption.trim()}`;
 
+    setCastStatus('Rendering image…');
     let imageUrl: string | undefined;
+
     try {
       let blob: Blob | null = null;
 
@@ -595,6 +604,7 @@ export default function MoodboardGenerator() {
       }
 
       if (blob) {
+        setCastStatus('Uploading image…');
         const formData = new FormData();
         formData.append('file', blob, 'moodboard.jpg');
 
@@ -602,22 +612,38 @@ export default function MoodboardGenerator() {
           method: 'POST',
           body: formData,
         });
+
         if (uploadRes.ok) {
           const json = await uploadRes.json();
           imageUrl = json.url;
+        } else {
+          const errBody = await uploadRes.text().catch(() => '');
+          console.error('Cast image upload response:', uploadRes.status, errBody);
         }
       }
     } catch (err) {
       console.error('Cast image upload failed:', err);
     }
 
-    const embed = imageUrl || 'https://moodboard-generator-phi.vercel.app';
-    try {
-      await sdk.actions.composeCast({ text, embeds: [embed] });
-    } catch {
-      const embedParam = imageUrl ? `&embeds[]=${encodeURIComponent(imageUrl)}` : '';
-      window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}${embedParam}`, '_blank');
+    if (!imageUrl) {
+      setCastStatus('Image upload failed — casting without image');
+      await new Promise((r) => setTimeout(r, 1200));
+    } else {
+      setCastStatus('Opening cast composer…');
     }
+
+    try {
+      await sdk.actions.composeCast({
+        text,
+        embeds: imageUrl ? [imageUrl] : [],
+      });
+    } catch {
+      const params = new URLSearchParams({ text });
+      if (imageUrl) params.append('embeds[]', imageUrl);
+      window.open(`https://warpcast.com/~/compose?${params.toString()}`, '_blank');
+    }
+
+    setCastStatus(null);
     clearDraft().catch(() => {});
   }, [title, caption, view, canvasImages, dims, bgColor, imageMargin, moodboardUrl]);
 
@@ -827,7 +853,7 @@ export default function MoodboardGenerator() {
         </div>
 
         {/* Export actions */}
-        <ActionBar onDownload={downloadManual} onPrint={printManual} onCast={castToFarcaster} />
+        <ActionBar onDownload={downloadManual} onPrint={printManual} onCast={castToFarcaster} castStatus={castStatus} />
 
         {/* Template bottom sheet */}
         {showTemplates && (
@@ -903,7 +929,7 @@ export default function MoodboardGenerator() {
         <div className="flex flex-1 items-start justify-center px-4 pb-4">
           <img src={moodboardUrl} alt={title} className="w-full max-w-lg rounded-sm" />
         </div>
-        <ActionBar onDownload={downloadAuto} onPrint={printAuto} onCast={castToFarcaster} />
+        <ActionBar onDownload={downloadAuto} onPrint={printAuto} onCast={castToFarcaster} castStatus={castStatus} />
       </div>
     );
   }

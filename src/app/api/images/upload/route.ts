@@ -4,6 +4,8 @@ import { images } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from '@/lib/auth';
 
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
+
 export async function POST(req: Request) {
   try {
     const auth = await verifyAuth(req);
@@ -14,14 +16,23 @@ export async function POST(req: Request) {
 
     const file = formData.get('file') as Blob | null;
     const hash = formData.get('hash') as string | null;
-    const naturalWidth = Number(formData.get('naturalWidth') || 0);
-    const naturalHeight = Number(formData.get('naturalHeight') || 0);
-    const filename = (formData.get('filename') as string) || '';
-    const tagsRaw = formData.get('tags') as string | null;
-    const tags: string[] = tagsRaw ? JSON.parse(tagsRaw) : [];
+    const naturalWidth = Math.max(0, Number(formData.get('naturalWidth') || 0));
+    const naturalHeight = Math.max(0, Number(formData.get('naturalHeight') || 0));
+    const filename = String(formData.get('filename') || '').slice(0, 200);
+
+    let tags: string[] = [];
+    try {
+      const tagsRaw = formData.get('tags') as string | null;
+      if (tagsRaw) tags = JSON.parse(tagsRaw);
+      if (!Array.isArray(tags)) tags = [];
+    } catch { tags = []; }
 
     if (!hash || !file) {
       return NextResponse.json({ error: 'Missing required fields (hash, file)' }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File too large (max 15 MB)' }, { status: 413 });
     }
 
     const db = getDb();
@@ -59,10 +70,10 @@ export async function POST(req: Request) {
       hash,
       fid,
       url,
-      filename: filename || '',
+      filename,
       naturalWidth,
       naturalHeight,
-      tags,
+      tags: tags.slice(0, 50),
       createdAt: new Date(),
     });
 
