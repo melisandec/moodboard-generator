@@ -25,8 +25,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid file type' }, { status: 415 });
     }
 
+    // Materialize the blob to ensure it survives Node.js FormData forwarding
+    const buffer = await file.arrayBuffer();
+    const freshBlob = new Blob([buffer], { type: file.type || 'image/jpeg' });
+
     const pinataForm = new FormData();
-    pinataForm.append('file', file, 'moodboard.jpg');
+    pinataForm.append('file', freshBlob, 'moodboard.jpg');
     pinataForm.append('pinataMetadata', JSON.stringify({ name: `moodboard-${Date.now()}` }));
 
     const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
@@ -49,7 +53,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Upload failed: no hash returned' }, { status: 502 });
     }
 
-    const gateway = process.env.PINATA_GATEWAY || 'gateway.pinata.cloud';
+    const gateway = (process.env.PINATA_GATEWAY || 'gateway.pinata.cloud').trim();
     const url = `https://${gateway}/ipfs/${ipfsHash}`;
 
     return NextResponse.json({ url, ipfsHash });

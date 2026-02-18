@@ -47,8 +47,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Image storage not configured' }, { status: 503 });
     }
 
+    const buffer = await file.arrayBuffer();
+    const freshBlob = new Blob([buffer], { type: file.type || 'image/jpeg' });
+
     const pinataForm = new FormData();
-    pinataForm.append('file', file, filename || `moodboard-${hash}.png`);
+    pinataForm.append('file', freshBlob, filename || `moodboard-${hash}.jpg`);
 
     const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
       method: 'POST',
@@ -63,7 +66,7 @@ export async function POST(req: Request) {
     }
 
     const { IpfsHash } = await pinataRes.json();
-    const gateway = process.env.PINATA_GATEWAY || 'gateway.pinata.cloud';
+    const gateway = (process.env.PINATA_GATEWAY || 'gateway.pinata.cloud').trim();
     const url = `https://${gateway}/ipfs/${IpfsHash}`;
 
     await db.insert(images).values({
