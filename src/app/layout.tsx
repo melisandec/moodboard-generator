@@ -25,15 +25,16 @@ export const metadata: Metadata = {
     type: 'website',
   },
   other: {
-    'fc:frame': JSON.stringify({
-      version: 'next',
-      imageUrl: 'https://moodboard.example.com/og.png',
+    'fc:miniapp': JSON.stringify({
+      version: '1',
+      imageUrl: 'https://moodboard-generator-phi.vercel.app/og.png',
       button: {
         title: 'Create Moodboard',
         action: {
           type: 'launch_frame',
           name: 'Moodboard Generator',
-          url: 'https://moodboard.example.com',
+          url: 'https://moodboard-generator-phi.vercel.app',
+          splashImageUrl: 'https://moodboard-generator-phi.vercel.app/icon.png',
           splashBackgroundColor: '#ffffff',
         },
       },

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { sdk } from '@farcaster/miniapp-sdk';
 import {
   loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
   renderManualMoodboard, extractColors,
@@ -124,8 +125,9 @@ export default function MoodboardGenerator() {
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
 
-  // Load persisted data on mount
+  // Initialize SDK and load persisted data on mount
   useEffect(() => {
+    sdk.actions.ready({ disableNativeGestures: true });
     loadArtworks().then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))).catch(() => {});
     loadTemplates().then(setUserTemplates).catch(() => {});
   }, []);
@@ -373,10 +375,17 @@ export default function MoodboardGenerator() {
     w.document.close();
   }, [title]);
 
-  const castToFarcaster = useCallback(() => {
+  const castToFarcaster = useCallback(async () => {
     let text = title.trim();
     if (caption.trim()) text += `\n\n${caption.trim()}`;
-    window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`, '_blank');
+    try {
+      await sdk.actions.composeCast({
+        text,
+        embeds: ['https://moodboard-generator-phi.vercel.app'],
+      });
+    } catch {
+      window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`, '_blank');
+    }
   }, [title, caption]);
 
   const downloadAuto = useCallback(() => { if (moodboardUrl) downloadUrl(moodboardUrl); }, [moodboardUrl, downloadUrl]);

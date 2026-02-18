@@ -7,7 +7,7 @@
   "frame": {
     "version": "1",
     "name": "Moodboard Generator",
-    "description": "Create and share beautiful moodboard collages on Farcaster",
+    "description": "Create and share moodboards on Farcaster",
     "tagline": "Moodboard Generator",
     "subtitle": "Create · Compose · Share",
     "iconUrl": "https://moodboard-generator-phi.vercel.app/icon.png",
@@ -18,7 +18,7 @@
     "imageUrl": "https://moodboard-generator-phi.vercel.app/og.png",
     "buttonTitle": "Create Moodboard",
     "ogTitle": "Moodboard Generator",
-    "ogDescription": "Create and share beautiful moodboard collages on Farcaster",
+    "ogDescription": "Create and share moodboards",
     "ogImageUrl": "https://moodboard-generator-phi.vercel.app/og.png",
     "castShareUrl": "https://moodboard-generator-phi.vercel.app/cast-share.png",
     "primaryCategory": "art",
