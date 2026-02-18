@@ -24,6 +24,8 @@ export interface Artwork {
   orientation: Orientation;
   bgColor: string;
   imageMargin: boolean;
+  categories: string[];
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,20 +45,49 @@ export interface Template {
   isBuiltIn: boolean;
 }
 
+export interface Draft {
+  id: 'current';
+  title: string;
+  caption: string;
+  images: CanvasImage[];
+  orientation: Orientation;
+  bgColor: string;
+  imageMargin: boolean;
+  categories: string[];
+  savedAt: string;
+}
+
+export interface LibraryImage {
+  id: string;
+  dataUrl: string;
+  filename: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  tags: string[];
+  uploadedAt: string;
+}
+
+export const DEFAULT_CATEGORIES = [
+  'Inspiration', 'Project', 'Client', 'Personal', 'Color Study',
+  'Texture & Material', 'Typography', 'Brand Identity', 'Travel', 'Seasonal',
+];
+
 const DB_NAME = 'moodboard-artworks';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains('artworks')) {
+      if (!db.objectStoreNames.contains('artworks'))
         db.createObjectStore('artworks', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('templates')) {
+      if (!db.objectStoreNames.contains('templates'))
         db.createObjectStore('templates', { keyPath: 'id' });
-      }
+      if (!db.objectStoreNames.contains('draft'))
+        db.createObjectStore('draft', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('library'))
+        db.createObjectStore('library', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -87,6 +118,18 @@ function idbGetAll<T>(store: string): Promise<T[]> {
   );
 }
 
+function idbGet<T>(store: string, key: string): Promise<T | undefined> {
+  return openDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(store, 'readonly');
+        const r = tx.objectStore(store).get(key);
+        r.onsuccess = () => { db.close(); resolve(r.result); };
+        r.onerror = () => { db.close(); reject(r.error); };
+      }),
+  );
+}
+
 function idbDelete(store: string, id: string): Promise<void> {
   return openDB().then(
     (db) =>
@@ -99,10 +142,49 @@ function idbDelete(store: string, id: string): Promise<void> {
   );
 }
 
+// Artworks
 export const saveArtwork = (a: Artwork) => idbPut('artworks', a);
 export const loadArtworks = () => idbGetAll<Artwork>('artworks');
 export const deleteArtwork = (id: string) => idbDelete('artworks', id);
 
+// Templates
 export const saveTemplate = (t: Template) => idbPut('templates', t);
 export const loadTemplates = () => idbGetAll<Template>('templates');
 export const deleteTemplate = (id: string) => idbDelete('templates', id);
+
+// Draft (single entry, id = 'current')
+export const saveDraft = (d: Draft) => idbPut('draft', d);
+export const loadDraft = () => idbGet<Draft>('draft', 'current').then((d) => d ?? null);
+export const clearDraft = () => idbDelete('draft', 'current');
+
+// Library
+export const saveLibraryImage = (img: LibraryImage) => idbPut('library', img);
+export const loadLibrary = () => idbGetAll<LibraryImage>('library');
+export const getLibraryImage = (id: string) => idbGet<LibraryImage>('library', id);
+export const deleteLibraryImage = (id: string) => idbDelete('library', id);
+
+export function imageHash(dataUrl: string): string {
+  const comma = dataUrl.indexOf(',');
+  const sample = dataUrl.substring(comma + 1, comma + 2001);
+  let h = 0;
+  for (let i = 0; i < sample.length; i++) {
+    h = ((h << 5) - h + sample.charCodeAt(i)) | 0;
+  }
+  return `lib-${(h >>> 0).toString(36)}`;
+}
+
+export async function ensureInLibrary(
+  dataUrl: string,
+  filename: string,
+  naturalWidth: number,
+  naturalHeight: number,
+): Promise<void> {
+  const id = imageHash(dataUrl);
+  const existing = await getLibraryImage(id);
+  if (!existing) {
+    await saveLibraryImage({
+      id, dataUrl, filename, naturalWidth, naturalHeight,
+      tags: [], uploadedAt: new Date().toISOString(),
+    });
+  }
+}

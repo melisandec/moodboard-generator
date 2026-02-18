@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { sdk } from '@farcaster/miniapp-sdk';
 import {
   loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
@@ -8,20 +8,24 @@ import {
 } from '@/lib/canvas';
 import {
   saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
-  type Artwork, type CanvasImage, type Orientation, type Template,
+  saveDraft, loadDraft, clearDraft, ensureInLibrary, DEFAULT_CATEGORIES,
+  type Artwork, type CanvasImage, type Orientation, type Template, type Draft, type LibraryImage,
 } from '@/lib/storage';
 import {
   CANVAS_DIMS, BUILT_IN_TEMPLATES, applyTemplate, artworkToTemplate,
   rescaleImages, templatePreviewSvg,
 } from '@/lib/templates';
 import InteractiveCanvas from './InteractiveCanvas';
+import ImageLibrary from './ImageLibrary';
 
 const MIN_IMAGES = 4;
 const MAX_IMAGES = 20;
 const MAX_HISTORY = 50;
+const AUTOSAVE_MS = 30_000;
 const BG_PRESETS = ['#FFFFFF', '#F8F8F8', '#F0F0F0', '#FAF9F6', '#000000'];
 
-type View = 'create' | 'auto-result' | 'manual';
+type View = 'create' | 'auto-result' | 'manual' | 'library';
+type ColSort = 'newest' | 'oldest' | 'title' | 'images';
 
 // ---------------------------------------------------------------------------
 // Tiny icon helpers
@@ -106,6 +110,12 @@ export default function MoodboardGenerator() {
   const [imageMargin, setImageMargin] = useState(false);
   const [processedData, setProcessedData] = useState<Array<{ dataUrl: string; naturalWidth: number; naturalHeight: number }>>([]);
 
+  // Categories
+  const [categories, setCategories] = useState<string[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [showCatRow, setShowCatRow] = useState(false);
+  const [newCatDraft, setNewCatDraft] = useState('');
+
   // Undo / Redo
   const [undoStack, setUndoStack] = useState<CanvasImage[][]>([]);
   const [redoStack, setRedoStack] = useState<CanvasImage[][]>([]);
@@ -117,20 +127,48 @@ export default function MoodboardGenerator() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [extractedColors, setExtractedColors] = useState<string[]>([]);
 
-  // Persisted data
+  // Auto-save draft
+  const [draftIndicator, setDraftIndicator] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
+
+  // Collection
   const [savedArtworks, setSavedArtworks] = useState<Artwork[]>([]);
   const [userTemplates, setUserTemplates] = useState<Template[]>([]);
+  const [colSearch, setColSearch] = useState('');
+  const [colSort, setColSort] = useState<ColSort>('newest');
+  const [colCatFilter, setColCatFilter] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
 
-  // Initialize SDK and load persisted data on mount
+  // -----------------------------------------------------------------------
+  // Initialize SDK, load persisted data, check for draft
+  // -----------------------------------------------------------------------
+
   useEffect(() => {
     sdk.actions.ready({ disableNativeGestures: true });
-    loadArtworks().then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))).catch(() => {});
+    loadArtworks()
+      .then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
+      .catch(() => {});
     loadTemplates().then(setUserTemplates).catch(() => {});
+
+    loadDraft().then((d) => {
+      if (d) setPendingDraft(d);
+    }).catch(() => {});
+
+    const stored = localStorage.getItem('moodboard-custom-categories');
+    if (stored) {
+      try { setCustomCategories(JSON.parse(stored)); } catch { /* ignore */ }
+    }
   }, []);
+
+  // Persist custom categories
+  useEffect(() => {
+    if (customCategories.length > 0) {
+      localStorage.setItem('moodboard-custom-categories', JSON.stringify(customCategories));
+    }
+  }, [customCategories]);
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -143,6 +181,58 @@ export default function MoodboardGenerator() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
+
+  // -----------------------------------------------------------------------
+  // Auto-save draft (every 30s in manual view)
+  // -----------------------------------------------------------------------
+
+  useEffect(() => {
+    if (view !== 'manual' || canvasImages.length === 0) return;
+    const timer = setInterval(() => {
+      const draft: Draft = {
+        id: 'current',
+        title: title.trim(),
+        caption: caption.trim(),
+        images: canvasImages,
+        orientation,
+        bgColor,
+        imageMargin,
+        categories,
+        savedAt: new Date().toISOString(),
+      };
+      saveDraft(draft).then(() => {
+        setDraftIndicator('Draft saved');
+        setTimeout(() => setDraftIndicator(null), 1500);
+      }).catch(() => {});
+    }, AUTOSAVE_MS);
+    return () => clearInterval(timer);
+  }, [view, title, caption, canvasImages, orientation, bgColor, imageMargin, categories]);
+
+  // -----------------------------------------------------------------------
+  // Draft recovery
+  // -----------------------------------------------------------------------
+
+  const recoverDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    setTitle(pendingDraft.title);
+    setCaption(pendingDraft.caption);
+    setCanvasImages(pendingDraft.images);
+    setProcessedData(pendingDraft.images.map((i) => ({ dataUrl: i.dataUrl, naturalWidth: i.naturalWidth, naturalHeight: i.naturalHeight })));
+    setOrientationState(pendingDraft.orientation ?? 'portrait');
+    setBgColor(pendingDraft.bgColor ?? '#f5f5f4');
+    setImageMargin(pendingDraft.imageMargin ?? false);
+    setCategories(pendingDraft.categories ?? []);
+    setArtworkId(null);
+    setUndoStack([]);
+    setRedoStack([]);
+    setView('manual');
+    setPendingDraft(null);
+  }, [pendingDraft]);
+
+  const dismissDraft = useCallback(() => {
+    clearDraft().catch(() => {});
+    setPendingDraft(null);
+  }, []);
 
   // -----------------------------------------------------------------------
   // Undo / Redo
@@ -172,6 +262,24 @@ export default function MoodboardGenerator() {
       return prev.slice(0, -1);
     });
   }, [canvasImages]);
+
+  // -----------------------------------------------------------------------
+  // Category management
+  // -----------------------------------------------------------------------
+
+  const allCategories = useMemo(() => [...DEFAULT_CATEGORIES, ...customCategories], [customCategories]);
+
+  const toggleCategory = useCallback((cat: string) => {
+    setCategories((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
+  }, []);
+
+  const addCustomCategory = useCallback(() => {
+    const name = newCatDraft.trim();
+    if (!name || allCategories.includes(name)) return;
+    setCustomCategories((p) => [...p, name]);
+    setCategories((p) => [...p, name]);
+    setNewCatDraft('');
+  }, [newCatDraft, allCategories]);
 
   // -----------------------------------------------------------------------
   // File handling
@@ -235,10 +343,17 @@ export default function MoodboardGenerator() {
       setArtworkId(null);
       setBgColor('#f5f5f4');
       setImageMargin(false);
+      setCategories([]);
       setUndoStack([]);
       setRedoStack([]);
       setExtractedColors([]);
+      clearDraft().catch(() => {});
       setView('manual');
+
+      // add images to library in background
+      for (let i = 0; i < processed.length; i++) {
+        ensureInLibrary(processed[i].dataUrl, files[i].name, processed[i].naturalWidth, processed[i].naturalHeight).catch(() => {});
+      }
     } catch (err) { console.error(err); }
     finally { setIsProcessing(false); }
   }, [canGenerate, isProcessing, files, orientation]);
@@ -252,6 +367,7 @@ export default function MoodboardGenerator() {
     setOrientationState(aw.orientation ?? 'portrait');
     setBgColor(aw.bgColor ?? '#f5f5f4');
     setImageMargin(aw.imageMargin ?? false);
+    setCategories(aw.categories ?? []);
     setUndoStack([]);
     setRedoStack([]);
     setExtractedColors([]);
@@ -267,10 +383,50 @@ export default function MoodboardGenerator() {
     setOrientationState(aw.orientation ?? 'portrait');
     setBgColor(aw.bgColor ?? '#f5f5f4');
     setImageMargin(aw.imageMargin ?? false);
+    setCategories(aw.categories ?? []);
     setUndoStack([]);
     setRedoStack([]);
     setView('manual');
   }, []);
+
+  // -----------------------------------------------------------------------
+  // Add images from library to current canvas
+  // -----------------------------------------------------------------------
+
+  const addFromLibrary = useCallback((libImages: LibraryImage[]) => {
+    const maxZ = canvasImages.length > 0 ? Math.max(...canvasImages.map((i) => i.zIndex)) + 1 : 0;
+    const newImgs: CanvasImage[] = libImages.map((li, idx) => {
+      const aspect = li.naturalWidth / li.naturalHeight;
+      const w = dims.w * 0.3;
+      const h = w / aspect;
+      return {
+        id: `img-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+        dataUrl: li.dataUrl,
+        x: dims.w * 0.1 + Math.random() * dims.w * 0.5,
+        y: dims.h * 0.1 + Math.random() * dims.h * 0.5,
+        width: w,
+        height: h,
+        rotation: (Math.random() - 0.5) * 8,
+        pinned: false,
+        zIndex: maxZ + idx,
+        naturalWidth: li.naturalWidth,
+        naturalHeight: li.naturalHeight,
+      };
+    });
+
+    if (view === 'manual' && canvasImages.length > 0) {
+      commitSnapshot();
+      setCanvasImages((prev) => [...prev, ...newImgs]);
+      setProcessedData((prev) => [...prev, ...libImages.map((li) => ({ dataUrl: li.dataUrl, naturalWidth: li.naturalWidth, naturalHeight: li.naturalHeight }))]);
+    } else {
+      setCanvasImages(newImgs);
+      setProcessedData(libImages.map((li) => ({ dataUrl: li.dataUrl, naturalWidth: li.naturalWidth, naturalHeight: li.naturalHeight })));
+      setArtworkId(null);
+      setUndoStack([]);
+      setRedoStack([]);
+    }
+    setView('manual');
+  }, [view, canvasImages, dims, commitSnapshot]);
 
   // -----------------------------------------------------------------------
   // Orientation switch
@@ -304,19 +460,27 @@ export default function MoodboardGenerator() {
     await saveArtwork({
       id, title: title.trim() || 'Untitled', caption: caption.trim(),
       images: canvasImages, canvasWidth: dims.w, canvasHeight: dims.h,
-      orientation, bgColor, imageMargin,
+      orientation, bgColor, imageMargin, categories,
+      pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
       createdAt, updatedAt: now,
     });
     setArtworkId(id);
     setSaveMsg('Saved');
     setTimeout(() => setSaveMsg(null), 1500);
     refreshCollection();
-  }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, refreshCollection]);
+    clearDraft().catch(() => {});
+  }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection]);
 
   const handleDeleteArtwork = useCallback(async (id: string) => {
     await deleteArtwork(id);
     setSavedArtworks((p) => p.filter((a) => a.id !== id));
   }, []);
+
+  const togglePinArtwork = useCallback(async (aw: Artwork) => {
+    const updated = { ...aw, pinned: !aw.pinned, updatedAt: aw.updatedAt };
+    await saveArtwork(updated);
+    refreshCollection();
+  }, [refreshCollection]);
 
   // -----------------------------------------------------------------------
   // Templates
@@ -386,6 +550,7 @@ export default function MoodboardGenerator() {
     } catch {
       window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`, '_blank');
     }
+    clearDraft().catch(() => {});
   }, [title, caption]);
 
   const downloadAuto = useCallback(() => { if (moodboardUrl) downloadUrl(moodboardUrl); }, [moodboardUrl, downloadUrl]);
@@ -394,12 +559,67 @@ export default function MoodboardGenerator() {
   const downloadManual = useCallback(async () => {
     const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
     downloadUrl(url);
+    clearDraft().catch(() => {});
   }, [canvasImages, title, caption, dims, bgColor, imageMargin, downloadUrl]);
 
   const printManual = useCallback(async () => {
     const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
     printUrl(url);
   }, [canvasImages, title, caption, dims, bgColor, imageMargin, printUrl]);
+
+  // -----------------------------------------------------------------------
+  // Collection filtering & sorting
+  // -----------------------------------------------------------------------
+
+  const collectionCategories = useMemo(() => {
+    const s = new Set<string>();
+    savedArtworks.forEach((a) => (a.categories ?? []).forEach((c) => s.add(c)));
+    return [...s].sort();
+  }, [savedArtworks]);
+
+  const filteredArtworks = useMemo(() => {
+    let list = [...savedArtworks];
+
+    if (colSearch) {
+      const q = colSearch.toLowerCase();
+      list = list.filter((a) =>
+        a.title.toLowerCase().includes(q) ||
+        a.caption.toLowerCase().includes(q) ||
+        (a.categories ?? []).some((c) => c.toLowerCase().includes(q)),
+      );
+    }
+
+    if (colCatFilter) {
+      list = list.filter((a) => (a.categories ?? []).includes(colCatFilter));
+    }
+
+    const pinned = list.filter((a) => a.pinned);
+    const unpinned = list.filter((a) => !a.pinned);
+
+    const sortFn = (arr: Artwork[]) => {
+      switch (colSort) {
+        case 'newest': return arr.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        case 'oldest': return arr.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+        case 'title': return arr.sort((a, b) => a.title.localeCompare(b.title));
+        case 'images': return arr.sort((a, b) => b.images.length - a.images.length);
+      }
+    };
+
+    return [...sortFn(pinned), ...sortFn(unpinned)];
+  }, [savedArtworks, colSearch, colSort, colCatFilter]);
+
+  // =====================================================================
+  // LIBRARY VIEW
+  // =====================================================================
+
+  if (view === 'library') {
+    return (
+      <ImageLibrary
+        onBack={() => setView('create')}
+        onAddToCanvas={addFromLibrary}
+      />
+    );
+  }
 
   // =====================================================================
   // MANUAL VIEW
@@ -417,6 +637,9 @@ export default function MoodboardGenerator() {
       </button>
     );
 
+    const chipCls = (active: boolean) =>
+      `rounded-full border px-2.5 py-1 text-[10px] transition-colors ${active ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`;
+
     return (
       <div className="flex min-h-[100dvh] flex-col bg-white">
         {/* Header */}
@@ -429,6 +652,7 @@ export default function MoodboardGenerator() {
             <button onClick={redo} disabled={redoStack.length === 0} className="flex h-10 w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-600 disabled:opacity-25" aria-label="Redo"><RedoIcon /></button>
           </div>
           <div className="flex items-center gap-2">
+            {draftIndicator && <span className="text-[10px] text-neutral-400 animate-pulse">{draftIndicator}</span>}
             {saveMsg && <span className="text-xs text-green-600">{saveMsg}</span>}
             <button onClick={saveToCollection} className="flex min-h-[44px] items-center rounded-full border border-neutral-300 px-3 text-[11px] text-neutral-600 hover:border-neutral-500">
               Save
@@ -446,13 +670,11 @@ export default function MoodboardGenerator() {
 
           <div className="h-5 w-px bg-neutral-200" />
 
-          {/* BG color toggle */}
           <button onClick={() => setShowBgPicker((p) => !p)} className={`flex h-8 items-center gap-1.5 rounded px-2 text-[11px] transition-colors ${showBgPicker ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
             <span className="inline-block h-3.5 w-3.5 rounded-full border border-neutral-300" style={{ backgroundColor: bgColor }} />
             BG
           </button>
 
-          {/* Margin toggle */}
           <button onClick={() => { commitSnapshot(); setImageMargin((p) => !p); }} className={`flex h-8 items-center gap-1 rounded px-2 text-[11px] transition-colors ${imageMargin ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={imageMargin ? 2.5 : 1.5} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>
             Margin
@@ -460,8 +682,16 @@ export default function MoodboardGenerator() {
 
           <div className="h-5 w-px bg-neutral-200" />
 
+          <button onClick={() => setShowCatRow((p) => !p)} className={`flex h-8 items-center rounded px-2 text-[11px] transition-colors ${showCatRow ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
+            Tags
+          </button>
+
           <button onClick={() => setShowTemplates(true)} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600">
             Templates
+          </button>
+
+          <button onClick={() => setView('library')} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600">
+            Library
           </button>
         </div>
 
@@ -490,6 +720,27 @@ export default function MoodboardGenerator() {
             <button onClick={doExtract} className="text-[10px] text-neutral-400 hover:text-neutral-600 underline underline-offset-2">
               Extract
             </button>
+          </div>
+        )}
+
+        {/* Category chips */}
+        {showCatRow && (
+          <div className="scrollbar-hide flex items-center gap-1.5 overflow-x-auto px-4 pb-2">
+            {allCategories.map((cat) => (
+              <button key={cat} onClick={() => toggleCategory(cat)} className={chipCls(categories.includes(cat))}>
+                {cat}
+              </button>
+            ))}
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={newCatDraft}
+                onChange={(e) => setNewCatDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCustomCategory(); }}
+                placeholder="+"
+                className="w-12 border-b border-neutral-200 bg-transparent text-center text-[10px] outline-none placeholder:text-neutral-300 focus:border-neutral-400"
+              />
+            </div>
           </div>
         )}
 
@@ -595,7 +846,24 @@ export default function MoodboardGenerator() {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-5 py-6">
-        <p className="text-[11px] uppercase tracking-widest text-neutral-400">Moodboard</p>
+
+        {/* Draft recovery banner */}
+        {pendingDraft && (
+          <div className="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
+            <span className="text-sm text-neutral-600">Unsaved work found</span>
+            <div className="flex gap-3">
+              <button onClick={recoverDraft} className="text-sm font-medium text-neutral-700 hover:text-neutral-900">Recover</button>
+              <button onClick={dismissDraft} className="text-sm text-neutral-400 hover:text-neutral-600">Dismiss</button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] uppercase tracking-widest text-neutral-400">Moodboard</p>
+          <button onClick={() => setView('library')} className="text-[11px] text-neutral-400 hover:text-neutral-600">
+            Library
+          </button>
+        </div>
 
         <input
           type="text" value={title} onChange={(e) => setTitle(e.target.value)}
@@ -648,23 +916,90 @@ export default function MoodboardGenerator() {
           </div>
         )}
 
-        {!title.trim() && files.length === 0 && savedArtworks.length === 0 && (
+        {!title.trim() && files.length === 0 && savedArtworks.length === 0 && !pendingDraft && (
           <p className="pt-4 text-center text-[11px] text-neutral-400">Add title + {MIN_IMAGES}–{MAX_IMAGES} images</p>
         )}
 
-        {/* Saved artworks collection */}
+        {/* ============================================================ */}
+        {/* COLLECTION                                                    */}
+        {/* ============================================================ */}
+
         {savedArtworks.length > 0 && (
           <div className="mt-2 border-t border-neutral-200 pt-4">
-            <p className="mb-3 text-[11px] uppercase tracking-widest text-neutral-400">Saved</p>
+            <p className="mb-3 text-[11px] uppercase tracking-widest text-neutral-400">Collection</p>
+
+            {/* Search */}
+            <input
+              type="text"
+              value={colSearch}
+              onChange={(e) => setColSearch(e.target.value)}
+              placeholder="Search collection"
+              className="mb-2 w-full border-b border-neutral-200 bg-transparent pb-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+            />
+
+            {/* Category filter + sort */}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="scrollbar-hide flex gap-1 overflow-x-auto">
+                <button
+                  onClick={() => setColCatFilter(null)}
+                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === null ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`}
+                >
+                  All
+                </button>
+                {collectionCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setColCatFilter(cat)}
+                    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === cat ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <select
+                value={colSort}
+                onChange={(e) => setColSort(e.target.value as ColSort)}
+                className="ml-2 flex-shrink-0 border-none bg-transparent text-[10px] text-neutral-500 outline-none"
+                aria-label="Sort collection"
+              >
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="title">Title</option>
+                <option value="images">Images</option>
+              </select>
+            </div>
+
+            {/* Artwork list */}
             <div className="flex flex-col gap-1">
-              {savedArtworks.map((aw) => (
+              {filteredArtworks.map((aw) => (
                 <div key={aw.id} className="flex items-center gap-1 border-b border-neutral-100 py-2.5">
+                  {/* Pin */}
+                  <button
+                    onClick={() => togglePinArtwork(aw)}
+                    className={`flex h-10 w-8 flex-shrink-0 items-center justify-center ${aw.pinned ? 'text-neutral-500' : 'text-neutral-200 hover:text-neutral-400'}`}
+                    aria-label={aw.pinned ? 'Unpin' : 'Pin'}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill={aw.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5">
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
+                    </svg>
+                  </button>
+
+                  {/* Info */}
                   <button onClick={() => loadArtworkForEditing(aw)} className="min-h-[44px] flex-1 text-left">
                     <p className="text-sm text-neutral-700">{aw.title}</p>
                     <p className="text-[11px] text-neutral-400">
                       {aw.images.length} image{aw.images.length !== 1 ? 's' : ''} · {new Date(aw.updatedAt).toLocaleDateString()}
                     </p>
+                    {(aw.categories ?? []).length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap gap-0.5">
+                        {(aw.categories ?? []).map((c) => (
+                          <span key={c} className="rounded-sm bg-neutral-100 px-1 text-[9px] text-neutral-500">{c}</span>
+                        ))}
+                      </div>
+                    )}
                   </button>
+
+                  {/* Actions */}
                   <button onClick={() => duplicateArtwork(aw)} className="flex h-10 w-10 items-center justify-center text-neutral-300 hover:text-neutral-500" aria-label="Duplicate">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -677,6 +1012,10 @@ export default function MoodboardGenerator() {
                   </button>
                 </div>
               ))}
+
+              {filteredArtworks.length === 0 && colSearch && (
+                <p className="py-4 text-center text-[11px] text-neutral-400">No matching artworks</p>
+              )}
             </div>
           </div>
         )}
