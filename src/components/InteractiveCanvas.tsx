@@ -23,6 +23,18 @@ function PinIndicator() {
   );
 }
 
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${on ? 'bg-neutral-700' : 'bg-neutral-300'}`}
+      aria-label={on ? 'Unpin' : 'Pin'}
+    >
+      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+    </button>
+  );
+}
+
 export default function InteractiveCanvas({
   images,
   onChange,
@@ -94,7 +106,6 @@ export default function InteractiveCanvas({
     [images, canvasWidth, onCommit, updateOne],
   );
 
-  // Drag via window-level pointer events
   useEffect(() => {
     if (!dragState) return;
     const onMove = (e: PointerEvent) => {
@@ -132,97 +143,104 @@ export default function InteractiveCanvas({
 
   const sorted = [...images].sort((a, b) => a.zIndex - b.zIndex);
   const marginPx = imageMargin ? 3 : 0;
+  const topZ = images.length > 0 ? Math.max(...images.map((i) => i.zIndex)) + 10 : 10;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div
-        ref={containerRef}
-        className="relative w-full touch-none overflow-hidden rounded-sm"
-        style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}`, backgroundColor: bgColor }}
-        onPointerDown={(e) => {
-          if (e.target === containerRef.current) setSelectedId(null);
-        }}
-      >
-        {sorted.map((img) => (
-          <div
-            key={img.id}
-            className={`absolute select-none ${
-              img.pinned ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-            } ${selectedId === img.id ? 'ring-2 ring-blue-400/50 ring-offset-1' : ''}`}
-            style={{
-              left: `${(img.x / canvasWidth) * 100}%`,
-              top: `${(img.y / canvasHeight) * 100}%`,
-              width: `${(img.width / canvasWidth) * 100}%`,
-              height: `${(img.height / canvasHeight) * 100}%`,
-              zIndex: img.zIndex,
-              transform: `rotate(${img.rotation}deg)`,
-              boxShadow: marginPx > 0 ? `0 0 0 ${marginPx}px white` : 'none',
-            }}
-            onPointerDown={(e) => handlePointerDown(e, img.id)}
-          >
-            <img src={img.dataUrl} alt="" className="pointer-events-none h-full w-full object-cover" draggable={false} />
-            {img.pinned && <PinIndicator />}
-          </div>
-        ))}
-
-        {images.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-sm text-neutral-400">No images on canvas</p>
-          </div>
-        )}
-      </div>
-
-      {selected ? (
-        <div className="flex items-center justify-center gap-2 py-1">
-          <button
-            onClick={() => resize(selected.id, 0.85)}
-            disabled={selected.pinned}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-neutral-300 text-neutral-500 transition-colors hover:text-neutral-700 disabled:opacity-30"
-            aria-label="Make smaller"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-          <button
-            onClick={() => resize(selected.id, 1.18)}
-            disabled={selected.pinned}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-neutral-300 text-neutral-500 transition-colors hover:text-neutral-700 disabled:opacity-30"
-            aria-label="Make larger"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-          <div className="mx-1 h-5 w-px bg-neutral-200" />
-          <button
-            onClick={() => togglePin(selected.id)}
-            className={`flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-full border px-3 text-xs transition-colors ${
-              selected.pinned
-                ? 'border-neutral-400 bg-neutral-100 text-neutral-600'
-                : 'border-neutral-300 text-neutral-500 hover:text-neutral-700'
-            }`}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill={selected.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-              <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
-            </svg>
-            {selected.pinned ? 'Unpin' : 'Pin'}
-          </button>
-          <div className="mx-1 h-5 w-px bg-neutral-200" />
-          <button
-            onClick={() => remove(selected.id)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-neutral-300 text-neutral-400 transition-colors hover:border-red-300 hover:text-red-500"
-            aria-label="Remove from canvas"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+    <div
+      ref={containerRef}
+      className="relative w-full touch-none overflow-visible rounded-sm"
+      style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}`, backgroundColor: bgColor }}
+      onPointerDown={(e) => {
+        if (e.target === containerRef.current) setSelectedId(null);
+      }}
+    >
+      {sorted.map((img) => (
+        <div
+          key={img.id}
+          className={`absolute select-none ${
+            img.pinned ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+          } ${selectedId === img.id ? 'ring-2 ring-blue-400/50 ring-offset-1' : ''}`}
+          style={{
+            left: `${(img.x / canvasWidth) * 100}%`,
+            top: `${(img.y / canvasHeight) * 100}%`,
+            width: `${(img.width / canvasWidth) * 100}%`,
+            height: `${(img.height / canvasHeight) * 100}%`,
+            zIndex: img.zIndex,
+            transform: `rotate(${img.rotation}deg)`,
+            boxShadow: marginPx > 0 ? `0 0 0 ${marginPx}px white` : 'none',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, img.id)}
+        >
+          <img src={img.dataUrl} alt="" className="pointer-events-none h-full w-full object-cover" draggable={false} />
+          {img.pinned && selectedId !== img.id && <PinIndicator />}
         </div>
-      ) : (
-        images.length > 0 && (
-          <p className="py-1 text-center text-[11px] text-neutral-400">Tap an image to select</p>
-        )
+      ))}
+
+      {/* Floating toolbar above selected image */}
+      {selected && (
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: `${(selected.x / canvasWidth) * 100}%`,
+            top: `${(selected.y / canvasHeight) * 100}%`,
+            width: `${(selected.width / canvasWidth) * 100}%`,
+            zIndex: topZ,
+          }}
+        >
+          <div
+            className="pointer-events-auto absolute bottom-full left-1/2 mb-1.5 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-2 py-1 shadow-md"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {/* Resize smaller */}
+            <button
+              onClick={() => resize(selected.id, 0.85)}
+              disabled={selected.pinned}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+              aria-label="Smaller"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+
+            {/* Resize larger */}
+            <button
+              onClick={() => resize(selected.id, 1.18)}
+              disabled={selected.pinned}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+              aria-label="Larger"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+
+            <div className="h-4 w-px bg-neutral-200" />
+
+            {/* Pin toggle */}
+            <span className="text-[10px] text-neutral-500">{selected.pinned ? 'unpin' : 'pin'}</span>
+            <Toggle on={selected.pinned} onToggle={() => togglePin(selected.id)} />
+
+            <div className="h-4 w-px bg-neutral-200" />
+
+            {/* Delete */}
+            <button
+              onClick={() => remove(selected.id)}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-500"
+              aria-label="Remove"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {images.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-sm text-neutral-400">No images on canvas</p>
+        </div>
       )}
     </div>
   );
