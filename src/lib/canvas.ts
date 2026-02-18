@@ -282,6 +282,36 @@ export async function renderManualMoodboard(
   return canvas.toDataURL('image/png');
 }
 
+export function renderMoodboardToBlob(
+  images: CanvasImage[],
+  title: string,
+  caption: string,
+  cw: number, ch: number,
+  bgColor = '#f5f5f4',
+  margin = false,
+  quality = 0.82,
+): Promise<Blob> {
+  return renderManualMoodboard(images, title, caption, cw, ch, bgColor, margin).then((dataUrl) => {
+    const img = new Image();
+    return new Promise<Blob>((resolve, reject) => {
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = Math.min(img.width, 1200);
+        c.height = Math.round(c.width * (img.height / img.width));
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))),
+          'image/jpeg',
+          quality,
+        );
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Color extraction
 // ---------------------------------------------------------------------------

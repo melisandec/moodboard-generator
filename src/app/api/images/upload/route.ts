@@ -47,7 +47,8 @@ export async function POST(req: Request) {
     }
 
     const { IpfsHash } = await pinataRes.json();
-    const url = `https://gateway.pinata.cloud/ipfs/${IpfsHash}`;
+    const gateway = process.env.PINATA_GATEWAY || 'gateway.pinata.cloud';
+    const url = `https://${gateway}/ipfs/${IpfsHash}`;
 
     await db.insert(images).values({
       hash,

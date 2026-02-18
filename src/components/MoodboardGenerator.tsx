@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { sdk } from '@farcaster/miniapp-sdk';
 import {
   loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
-  renderManualMoodboard, extractColors,
+  renderManualMoodboard, renderMoodboardToBlob, extractColors,
 } from '@/lib/canvas';
 import {
   saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
@@ -467,6 +467,10 @@ export default function MoodboardGenerator() {
     loadArtworks().then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (syncStatus === 'synced') refreshCollection();
+  }, [syncStatus, refreshCollection]);
+
   const saveToCollection = useCallback(async () => {
     const now = new Date().toISOString();
     const id = artworkId ?? `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -487,7 +491,7 @@ export default function MoodboardGenerator() {
     setTimeout(() => setSaveMsg(null), 1500);
     refreshCollection();
     clearDraft().catch(() => {});
-    if (cloudUser) cloudSync().catch(() => {});
+    if (cloudUser) cloudSync().then(() => refreshCollection()).catch(() => {});
   }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection, cloudUser, cloudSync]);
 
   const handleDeleteArtwork = useCallback(async (id: string) => {
@@ -581,29 +585,30 @@ export default function MoodboardGenerator() {
 
     let imageUrl: string | undefined;
     try {
-      const dataUrl =
-        view === 'manual'
-          ? await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin)
-          : moodboardUrl;
+      let blob: Blob | null = null;
 
-      if (dataUrl) {
-        const commaIdx = dataUrl.indexOf(',');
-        const header = dataUrl.substring(0, commaIdx);
-        const base64 = dataUrl.substring(commaIdx + 1);
-        const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
+      if (view === 'manual' && canvasImages.length > 0) {
+        blob = await renderMoodboardToBlob(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
+      } else if (moodboardUrl) {
+        const res = await fetch(moodboardUrl);
+        blob = await res.blob();
+      }
 
-        const res = await fetch('/api/cast-image', {
+      if (blob) {
+        const formData = new FormData();
+        formData.append('file', blob, 'moodboard.jpg');
+
+        const uploadRes = await fetch('/api/cast-image', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: base64, contentType }),
+          body: formData,
         });
-        if (res.ok) {
-          const json = await res.json();
+        if (uploadRes.ok) {
+          const json = await uploadRes.json();
           imageUrl = json.url;
         }
       }
-    } catch {
-      // upload failed — fall back to app URL embed
+    } catch (err) {
+      console.error('Cast image upload failed:', err);
     }
 
     const embed = imageUrl || 'https://moodboard-generator-phi.vercel.app';
@@ -930,7 +935,7 @@ export default function MoodboardGenerator() {
             </button>
             {cloudUser ? (
               <button
-                onClick={() => cloudSync().catch(() => {})}
+                onClick={() => cloudSync().then(() => refreshCollection()).catch(() => {})}
                 disabled={syncStatus === 'syncing'}
                 className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 disabled:opacity-40"
               >

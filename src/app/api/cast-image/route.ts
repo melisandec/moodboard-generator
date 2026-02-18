@@ -2,34 +2,36 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const { data, contentType } = await req.json();
-    if (!data) {
-      return NextResponse.json({ error: 'Missing image data' }, { status: 400 });
-    }
-
     const pinataJwt = process.env.PINATA_JWT;
     if (!pinataJwt) {
       return NextResponse.json({ error: 'Image storage not configured' }, { status: 503 });
     }
 
-    const binary = Buffer.from(data, 'base64');
-    const blob = new Blob([binary], { type: contentType || 'image/png' });
-    const formData = new FormData();
-    formData.append('file', blob, 'moodboard.png');
+    const incoming = await req.formData();
+    const file = incoming.get('file') as Blob | null;
+    if (!file) {
+      return NextResponse.json({ error: 'Missing file' }, { status: 400 });
+    }
+
+    const pinataForm = new FormData();
+    pinataForm.append('file', file, 'moodboard.jpg');
 
     const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
       method: 'POST',
       headers: { Authorization: `Bearer ${pinataJwt}` },
-      body: formData,
+      body: pinataForm,
     });
 
     if (!pinataRes.ok) {
-      console.error('Pinata cast-image upload failed:', pinataRes.status);
+      const errText = await pinataRes.text();
+      console.error('Pinata cast-image upload failed:', pinataRes.status, errText);
       return NextResponse.json({ error: 'Upload failed' }, { status: 502 });
     }
 
     const { IpfsHash } = await pinataRes.json();
-    const url = `https://gateway.pinata.cloud/ipfs/${IpfsHash}`;
+
+    const gateway = process.env.PINATA_GATEWAY || 'gateway.pinata.cloud';
+    const url = `https://${gateway}/ipfs/${IpfsHash}`;
 
     return NextResponse.json({ url });
   } catch (err) {

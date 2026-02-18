@@ -15,7 +15,7 @@ interface CloudContextValue {
   isMiniApp: boolean;
   signIn: () => Promise<void>;
   signOut: () => void;
-  sync: (localOverride?: Artwork[]) => Promise<void>;
+  sync: (localOverride?: Artwork[]) => Promise<Artwork[]>;
 }
 
 const CloudContext = createContext<CloudContextValue>({
@@ -25,7 +25,7 @@ const CloudContext = createContext<CloudContextValue>({
   isMiniApp: false,
   signIn: async () => {},
   signOut: () => {},
-  sync: async () => {},
+  sync: async () => [],
 });
 
 export function useCloud() {
@@ -50,6 +50,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   const [isMiniApp, setIsMiniApp] = useState(false);
   const syncLock = useRef(false);
   const initDone = useRef(false);
+  const pendingAutoSync = useRef(false);
 
   useEffect(() => {
     if (initDone.current) return;
@@ -78,6 +79,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
           setUser(cloudUser);
           localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(cloudUser));
           registerUser(cloudUser, authFetch).catch(() => {});
+          pendingAutoSync.current = true;
         }
       } catch {
         /* not in Farcaster context */
@@ -114,8 +116,8 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(STORAGE_SYNC_KEY);
   }, []);
 
-  const sync = useCallback(async (localOverride?: Artwork[]) => {
-    if (!user || syncLock.current) return;
+  const sync = useCallback(async (localOverride?: Artwork[]): Promise<Artwork[]> => {
+    if (!user || syncLock.current) return [];
     syncLock.current = true;
     setSyncStatus('syncing');
 
@@ -134,13 +136,22 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
       setLastSyncAt(now);
       localStorage.setItem(STORAGE_SYNC_KEY, now);
       setSyncStatus('synced');
+      return cloudArtworks;
     } catch (err) {
       console.error('Sync error:', err);
       setSyncStatus('error');
+      return [];
     } finally {
       syncLock.current = false;
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && pendingAutoSync.current) {
+      pendingAutoSync.current = false;
+      sync().catch(() => {});
+    }
+  }, [user, sync]);
 
   return (
     <CloudContext.Provider value={{ user, syncStatus, lastSyncAt, isMiniApp, signIn, signOut, sync }}>
