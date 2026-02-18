@@ -10,11 +10,18 @@ export async function POST(req: Request) {
     if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const fid = String(auth.fid);
-    const { hash, data, contentType, filename, naturalWidth, naturalHeight, tags } =
-      await req.json();
+    const formData = await req.formData();
 
-    if (!hash || !data) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    const file = formData.get('file') as Blob | null;
+    const hash = formData.get('hash') as string | null;
+    const naturalWidth = Number(formData.get('naturalWidth') || 0);
+    const naturalHeight = Number(formData.get('naturalHeight') || 0);
+    const filename = (formData.get('filename') as string) || '';
+    const tagsRaw = formData.get('tags') as string | null;
+    const tags: string[] = tagsRaw ? JSON.parse(tagsRaw) : [];
+
+    if (!hash || !file) {
+      return NextResponse.json({ error: 'Missing required fields (hash, file)' }, { status: 400 });
     }
 
     const db = getDb();
@@ -29,15 +36,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Image storage not configured' }, { status: 503 });
     }
 
-    const binary = Buffer.from(data, 'base64');
-    const blob = new Blob([binary], { type: contentType || 'image/png' });
-    const formData = new FormData();
-    formData.append('file', blob, filename || `moodboard-${hash}.png`);
+    const pinataForm = new FormData();
+    pinataForm.append('file', file, filename || `moodboard-${hash}.png`);
 
     const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
       method: 'POST',
       headers: { Authorization: `Bearer ${pinataJwt}` },
-      body: formData,
+      body: pinataForm,
     });
 
     if (!pinataRes.ok) {
@@ -55,9 +60,9 @@ export async function POST(req: Request) {
       fid,
       url,
       filename: filename || '',
-      naturalWidth: naturalWidth ?? 0,
-      naturalHeight: naturalHeight ?? 0,
-      tags: tags ?? [],
+      naturalWidth,
+      naturalHeight,
+      tags,
       createdAt: new Date(),
     });
 

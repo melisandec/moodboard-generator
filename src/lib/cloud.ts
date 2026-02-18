@@ -31,7 +31,20 @@ export async function registerUser(user: CloudUser, fetchFn: FetchFn): Promise<v
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: user.username, pfpUrl: user.pfpUrl }),
   });
-  if (!res.ok) throw new Error('Failed to register user');
+  if (!res.ok) {
+    console.error('registerUser failed:', res.status, await res.text().catch(() => ''));
+    throw new Error('Failed to register user');
+  }
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const commaIdx = dataUrl.indexOf(',');
+  const header = dataUrl.substring(0, commaIdx);
+  const raw = atob(dataUrl.substring(commaIdx + 1));
+  const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return new Blob([bytes], { type: contentType });
 }
 
 async function uploadImage(
@@ -42,17 +55,22 @@ async function uploadImage(
   naturalHeight: number,
   fetchFn: FetchFn,
 ): Promise<string> {
-  const commaIdx = dataUrl.indexOf(',');
-  const header = dataUrl.substring(0, commaIdx);
-  const data = dataUrl.substring(commaIdx + 1);
-  const contentType = header.match(/:(.*?);/)?.[1] || 'image/png';
+  const blob = dataUrlToBlob(dataUrl);
+
+  const formData = new FormData();
+  formData.append('file', blob, filename || `image-${hash}.png`);
+  formData.append('hash', hash);
+  formData.append('naturalWidth', String(naturalWidth));
+  formData.append('naturalHeight', String(naturalHeight));
 
   const res = await fetchFn('/api/images/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hash, data, contentType, filename, naturalWidth, naturalHeight }),
+    body: formData,
   });
-  if (!res.ok) throw new Error('Image upload failed');
+  if (!res.ok) {
+    console.error('uploadImage failed:', res.status, await res.text().catch(() => ''));
+    throw new Error('Image upload failed');
+  }
   const { url } = await res.json();
   return url;
 }
@@ -108,7 +126,10 @@ export async function pushToCloud(artworks: Artwork[], fetchFn: FetchFn): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ boards }),
   });
-  if (!res.ok) throw new Error('Sync push failed');
+  if (!res.ok) {
+    console.error('pushToCloud failed:', res.status, await res.text().catch(() => ''));
+    throw new Error('Sync push failed');
+  }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -122,7 +143,10 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
   const res = await fetchFn('/api/sync');
-  if (!res.ok) throw new Error('Sync pull failed');
+  if (!res.ok) {
+    console.error('pullFromCloud failed:', res.status, await res.text().catch(() => ''));
+    throw new Error('Sync pull failed');
+  }
 
   const { boards, imageMap } = await res.json() as {
     boards: Array<{
@@ -154,8 +178,8 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
           rotation: ci.rotation, pinned: ci.pinned, zIndex: ci.zIndex,
           naturalWidth: ci.naturalWidth, naturalHeight: ci.naturalHeight,
         });
-      } catch {
-        // skip unreachable images
+      } catch (err) {
+        console.error('Failed to fetch IPFS image:', info.url, err);
       }
     }
 

@@ -37,8 +37,10 @@ const STORAGE_SYNC_KEY = 'moodboard-last-sync';
 
 async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
-    return await sdk.quickAuth.fetch(input, init);
-  } catch {
+    const res = await sdk.quickAuth.fetch(input, init);
+    return res;
+  } catch (err) {
+    console.warn('quickAuth.fetch failed, falling back to plain fetch:', err);
     return fetch(input, init);
   }
 }
