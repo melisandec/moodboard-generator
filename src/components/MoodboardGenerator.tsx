@@ -424,7 +424,7 @@ export default function MoodboardGenerator() {
         y: dims.h * 0.1 + Math.random() * dims.h * 0.5,
         width: w,
         height: h,
-        rotation: (Math.random() - 0.5) * 8,
+        rotation: 0,
         pinned: false,
         zIndex: maxZ + idx,
         naturalWidth: li.naturalWidth,

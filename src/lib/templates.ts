@@ -79,7 +79,7 @@ export function applyTemplate(
     const w = cw * s.scale;
     const h = w / aspect;
     const layer = Math.floor(i / template.slots.length) * template.slots.length;
-    return mk(img, w, h, cw * s.cx - w / 2, ch * s.cy - h / 2, s.rotation + (Math.random() - 0.5) * 0.8, s.zIndex + layer);
+    return mk(img, w, h, cw * s.cx - w / 2, ch * s.cy - h / 2, 0, s.zIndex + layer);
   });
 
   function mk(

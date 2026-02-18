@@ -124,7 +124,7 @@ function generatePlacements(images: HTMLImageElement[], W: number, H: number, re
       x: clamp(cx + ox - w / 2, -w * 0.1, W - w * 0.9),
       y: clamp(cy + oy - h / 2, -h * 0.1, H - reserveBottom - h * 0.9),
       width: w, height: h,
-      rotation: (Math.random() - 0.5) * 6,
+      rotation: 0,
     });
   }
   return shuffle(placements);
@@ -226,7 +226,7 @@ export function createInitialPlacements(
       x: cx - w / 2 + (Math.random() - 0.5) * cellW * 0.12,
       y: cy - h / 2 + (Math.random() - 0.5) * cellH * 0.12,
       width: w, height: h,
-      rotation: (Math.random() - 0.5) * 4,
+      rotation: 0,
       pinned: false, zIndex: i,
       naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight,
     };
