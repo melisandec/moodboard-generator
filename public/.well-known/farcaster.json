@@ -1,17 +1,30 @@
 {
   "accountAssociation": {
-    "header": "REPLACE_WITH_YOUR_HEADER",
-    "payload": "REPLACE_WITH_YOUR_PAYLOAD",
-    "signature": "REPLACE_WITH_YOUR_SIGNATURE"
+    "header": "eyJmaWQiOjQyOTQ1MCwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDk1OTk3MzZGQTU0NzI3MDQwOGFGZjhGNTNCMTZCMDYyODNEM2NDMDUifQ",
+    "payload": "eyJkb21haW4iOiJwaXhlbC1sb2dvLWdlbmVyYXRvci52ZXJjZWwuYXBwIn0",
+    "signature": "MtC/iiM0k6LMcPzIx8P+b7U7D+w/pbTW2/Xgfeqh6ycodFI97+sn+GLJMtz2QToM0DbgfEZyq+4K8x+obG8EKRs="
   },
   "frame": {
     "version": "1",
     "name": "Moodboard Generator",
+    "description": "Create and share beautiful moodboard collages on Farcaster",
+    "tagline": "Moodboard Generator",
+    "subtitle": "Upload images, generate boards, & cast",
     "iconUrl": "https://moodboard.example.com/icon.png",
     "homeUrl": "https://moodboard.example.com",
-    "imageUrl": "https://moodboard.example.com/og.png",
     "buttonTitle": "Create Moodboard",
     "splashImageUrl": "https://moodboard.example.com/splash.png",
-    "splashBackgroundColor": "#ffffff"
+    "splashBackgroundColor": "#ffffff",
+    "heroImageUrl": "https://moodboard.example.com/hero.png",
+    "imageUrl": "https://moodboard.example.com/og.png",
+    "buttonTitle": "Create Moodboard",
+    "ogTitle": "Moodboard Generator",
+    "ogDescription": "Create and share beautiful moodboard collages on Farcaster",
+    "ogImageUrl": "https://moodboard.example.com/og.png",
+    "castShareUrl": "https://moodboard.example.com/cast-share.png",
+    "primaryCategory": "art",
+    "webhookUrl": "https://moodboard.example.com/webhook",
+    "canonicalDomain": "moodboard.example.com",
+    "tags": ["moodboard", "collage", "art", "farcaster"]
   }
 }
