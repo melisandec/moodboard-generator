@@ -9,7 +9,7 @@ import {
 import {
   saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
   saveDraft, loadDraft, clearDraft, ensureInLibrary, DEFAULT_CATEGORIES,
-  stripDataUrls, rehydrateImages,
+  stripDataUrls, rehydrateImages, isIndexedDBAvailable,
   type Artwork, type CanvasImage, type LightCanvasImage, type Orientation, type Template, type Draft, type LibraryImage,
 } from '@/lib/storage';
 import {
@@ -183,6 +183,9 @@ export default function MoodboardGenerator() {
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
 
+  // Storage availability
+  const [storageAvailable, setStorageAvailable] = useState(true);
+
   // Dark mode
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -211,6 +214,7 @@ export default function MoodboardGenerator() {
 
   useEffect(() => {
     sdk.actions.ready({ disableNativeGestures: true }).catch(() => {});
+    isIndexedDBAvailable().then((ok) => setStorageAvailable(ok)).catch(() => setStorageAvailable(false));
     loadArtworks()
       .then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
       .catch(() => {});
@@ -1074,6 +1078,16 @@ export default function MoodboardGenerator() {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-5 py-6">
+
+        {/* Storage unavailable banner */}
+        {!storageAvailable && (
+          <div className="flex items-center gap-3 rounded-md border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/30 px-4 py-3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-600 dark:text-amber-400">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
+            </svg>
+            <span className="text-sm text-amber-800 dark:text-amber-200">Storage unavailable — your work won&apos;t be saved between sessions</span>
+          </div>
+        )}
 
         {/* Draft recovery banner */}
         {pendingDraft && (

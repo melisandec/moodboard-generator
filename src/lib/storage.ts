@@ -93,6 +93,57 @@ export const DEFAULT_CATEGORIES = [
 const DB_NAME = 'moodboard-artworks';
 const DB_VERSION = 3;
 
+// ---------------------------------------------------------------------------
+// IndexedDB availability detection + in-memory fallback
+// ---------------------------------------------------------------------------
+
+let _idbAvailable: boolean | null = null;
+
+/** Returns true if IndexedDB is usable, caches the result. */
+export async function isIndexedDBAvailable(): Promise<boolean> {
+  if (_idbAvailable !== null) return _idbAvailable;
+
+  try {
+    if (typeof indexedDB === 'undefined') {
+      _idbAvailable = false;
+      return false;
+    }
+
+    // Probe with a real open/delete cycle to catch private-browsing blocks
+    const testName = '__idb_availability_test__';
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open(testName);
+      req.onsuccess = () => {
+        req.result.close();
+        indexedDB.deleteDatabase(testName);
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+    _idbAvailable = true;
+  } catch {
+    _idbAvailable = false;
+  }
+
+  return _idbAvailable;
+}
+
+/**
+ * Simple in-memory store used as fallback when IndexedDB is unavailable.
+ * Data lives only for the current session — the user is warned via
+ * `isIndexedDBAvailable()` that their work won't persist.
+ */
+const memoryStores = new Map<string, Map<string, unknown>>();
+
+function getMemStore(store: string): Map<string, unknown> {
+  let m = memoryStores.get(store);
+  if (!m) {
+    m = new Map();
+    memoryStores.set(store, m);
+  }
+  return m;
+}
+
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -112,52 +163,63 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-function idbPut(store: string, value: unknown): Promise<void> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).put(value);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      }),
-  );
+async function idbPut(store: string, value: unknown): Promise<void> {
+  if (!(await isIndexedDBAvailable())) {
+    const record = value as { id: string };
+    getMemStore(store).set(record.id, value);
+    return;
+  }
+
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
 }
 
-function idbGetAll<T>(store: string): Promise<T[]> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readonly');
-        const r = tx.objectStore(store).getAll();
-        r.onsuccess = () => { db.close(); resolve(r.result); };
-        r.onerror = () => { db.close(); reject(r.error); };
-      }),
-  );
+async function idbGetAll<T>(store: string): Promise<T[]> {
+  if (!(await isIndexedDBAvailable())) {
+    return [...getMemStore(store).values()] as T[];
+  }
+
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const r = tx.objectStore(store).getAll();
+    r.onsuccess = () => { db.close(); resolve(r.result); };
+    r.onerror = () => { db.close(); reject(r.error); };
+  });
 }
 
-function idbGet<T>(store: string, key: string): Promise<T | undefined> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readonly');
-        const r = tx.objectStore(store).get(key);
-        r.onsuccess = () => { db.close(); resolve(r.result); };
-        r.onerror = () => { db.close(); reject(r.error); };
-      }),
-  );
+async function idbGet<T>(store: string, key: string): Promise<T | undefined> {
+  if (!(await isIndexedDBAvailable())) {
+    return getMemStore(store).get(key) as T | undefined;
+  }
+
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const r = tx.objectStore(store).get(key);
+    r.onsuccess = () => { db.close(); resolve(r.result); };
+    r.onerror = () => { db.close(); reject(r.error); };
+  });
 }
 
-function idbDelete(store: string, id: string): Promise<void> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).delete(id);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      }),
-  );
+async function idbDelete(store: string, id: string): Promise<void> {
+  if (!(await isIndexedDBAvailable())) {
+    getMemStore(store).delete(id);
+    return;
+  }
+
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(id);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
 }
 
 // Artworks

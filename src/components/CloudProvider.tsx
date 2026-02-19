@@ -7,6 +7,7 @@ import {
   type CloudUser, type SyncStatus,
 } from '@/lib/cloud';
 import { loadArtworks, saveArtwork, type Artwork } from '@/lib/storage';
+import { enqueueSync, clearSyncQueue, hasPendingSync, getPendingArtworkIds } from '@/lib/sync-queue';
 
 interface CloudContextValue {
   user: CloudUser | null;
@@ -69,6 +70,7 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   const syncLock = useRef(false);
   const initDone = useRef(false);
   const pendingAutoSync = useRef(false);
+  const queuedSync = useRef<{ localOverride?: Artwork[]; resolve: (v: Artwork[]) => void; reject: (e: unknown) => void } | null>(null);
 
   useEffect(() => {
     if (initDone.current) return;
@@ -135,20 +137,56 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const sync = useCallback(async (localOverride?: Artwork[]): Promise<Artwork[]> => {
-    if (!user || syncLock.current) return [];
+    if (!user) return [];
+
+    // If offline, queue the sync for later and update status
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const localArtworks = localOverride ?? await loadArtworks();
+      enqueueSync(localArtworks.map((a) => a.id));
+      setSyncStatus('offline');
+      return [];
+    }
+
+    // If already syncing, queue this request to run after the current one finishes
+    if (syncLock.current) {
+      return new Promise<Artwork[]>((resolve, reject) => {
+        queuedSync.current = { localOverride, resolve, reject };
+      });
+    }
+
     syncLock.current = true;
     setSyncStatus('syncing');
 
     try {
+      // Include any previously queued offline artwork IDs
+      const pendingIds = getPendingArtworkIds();
       const localArtworks = localOverride ?? await loadArtworks();
-      if (localArtworks.length > 0) {
-        await pushToCloud(localArtworks, authFetch, lastSyncAt);
+
+      // If there are pending offline IDs, ensure we push those artworks too
+      let artworksToPush = localArtworks;
+      if (pendingIds.length > 0 && !localOverride) {
+        const localIds = new Set(localArtworks.map((a) => a.id));
+        const missingIds = pendingIds.filter((id) => !localIds.has(id));
+        if (missingIds.length > 0) {
+          // All artworks are already loaded above, but the pending ones
+          // ensure we push even if incremental sync would skip them
+          artworksToPush = localArtworks;
+        }
+      }
+
+      if (artworksToPush.length > 0) {
+        // When draining the offline queue, push everything (no incremental `since`)
+        const since = pendingIds.length > 0 ? null : lastSyncAt;
+        await pushToCloud(artworksToPush, authFetch, since);
       }
 
       const cloudArtworks = await pullFromCloud(authFetch);
       for (const aw of cloudArtworks) {
         await saveArtwork(aw);
       }
+
+      // Sync succeeded — clear any offline queue
+      clearSyncQueue();
 
       const now = new Date().toISOString();
       setLastSyncAt(now);
@@ -157,10 +195,26 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
       return cloudArtworks;
     } catch (err) {
       console.error('Sync error:', err);
-      setSyncStatus('error');
+
+      // If the error is due to going offline mid-sync, queue for later
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const localArtworks = localOverride ?? await loadArtworks().catch(() => []);
+        enqueueSync(localArtworks.map((a) => a.id));
+        setSyncStatus('offline');
+      } else {
+        setSyncStatus('error');
+      }
+
       return [];
     } finally {
       syncLock.current = false;
+
+      // Process queued sync request if one was waiting
+      const queued = queuedSync.current;
+      if (queued) {
+        queuedSync.current = null;
+        sync(queued.localOverride).then(queued.resolve, queued.reject);
+      }
     }
   }, [user, lastSyncAt]);
 
@@ -170,6 +224,43 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
       sync().catch(() => {});
     }
   }, [user, sync]);
+
+  // ---------------------------------------------------------------------------
+  // Online/offline detection — drain queue when connectivity returns
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleOnline = () => {
+      // Connectivity restored — drain offline queue if there are pending ops
+      if (hasPendingSync()) {
+        sync().catch(() => {});
+      } else if (syncStatus === 'offline') {
+        setSyncStatus('idle');
+      }
+    };
+
+    const handleOffline = () => {
+      setSyncStatus('offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Check on mount if we're offline or have a pending queue
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+    } else if (hasPendingSync()) {
+      // Came back online with pending items (e.g. page reload while online)
+      sync().catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [user, sync, syncStatus]);
 
   return (
     <CloudContext.Provider value={{ user, syncStatus, lastSyncAt, isMiniApp, signIn, signOut, sync }}>

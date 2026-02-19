@@ -786,7 +786,7 @@ All entity IDs use: `prefix-timestamp-randomAlpha`, e.g., `img-1708000000000-x7k
 
 ### Coordinate System
 
-Logical coordinates (e.g., 1080×1527 for tall rectangle). Display uses percentage-based CSS: `(value / canvasDim) * 100%`. Scale factor for drag: `containerWidth / canvasWidth`.
+Logical coordinates (e.g., 1080×1527 for portrait A4). Display uses percentage-based CSS: `(value / canvasDim) * 100%`. Scale factor for drag: `containerWidth / canvasWidth`.
 
 ### Error Handling
 
@@ -851,7 +851,7 @@ All features are implemented and the project builds cleanly with no TypeScript e
 - Image upload with validation (4–20 images, JPEG/PNG/WebP/GIF)
 - Auto-generate collage with organic scatter algorithm
 - Interactive manual canvas (drag, resize, pin, delete, layer)
-- Canvas format toggle (tall rectangle, long rectangle, square)
+- Canvas orientation toggle (portrait A4, landscape A4, square)
 - Memory-optimized undo/redo (50-step history, lightweight snapshots, keyboard shortcuts)
 - Background color picker with 5 presets + color extraction
 - White margin toggle

@@ -51,6 +51,17 @@ const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 20;
+const CLEANUP_INTERVAL_MS = 5 * 60_000; // 5 minutes
+let lastCleanup = Date.now();
+
+/** Evict expired buckets periodically instead of only at 10k entries. */
+function cleanupExpiredBuckets(now: number) {
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
+  lastCleanup = now;
+  for (const [key, bucket] of rateBuckets) {
+    if (now > bucket.resetAt) rateBuckets.delete(key);
+  }
+}
 
 export function rateLimit(req: Request, max = RATE_MAX): NextResponse | null {
   const ip =
@@ -59,6 +70,10 @@ export function rateLimit(req: Request, max = RATE_MAX): NextResponse | null {
     'unknown';
 
   const now = Date.now();
+
+  // Periodic cleanup to prevent memory growth on long-lived instances
+  cleanupExpiredBuckets(now);
+
   let bucket = rateBuckets.get(ip);
 
   if (!bucket || now > bucket.resetAt) {
@@ -73,13 +88,6 @@ export function rateLimit(req: Request, max = RATE_MAX): NextResponse | null {
       { error: 'Too many requests, try again later' },
       { status: 429, headers: { 'Retry-After': '60' } },
     );
-  }
-
-  // Periodic cleanup to prevent memory leak
-  if (rateBuckets.size > 10_000) {
-    for (const [k, v] of rateBuckets) {
-      if (now > v.resetAt) rateBuckets.delete(k);
-    }
   }
 
   return null;
