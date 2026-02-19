@@ -1,8 +1,12 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
-  saveDraft, loadDraft, clearDraft,
-  type CanvasImage, type Draft, type Orientation,
-} from '@/lib/storage';
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  type CanvasImage,
+  type Draft,
+  type Orientation,
+} from "@/lib/storage";
 
 const AUTOSAVE_MS = 30_000;
 
@@ -24,27 +28,47 @@ interface AutoSaveConfig {
  * Also manages draft recovery (pending draft from a previous session).
  */
 export function useAutoSave(config: AutoSaveConfig) {
-  const { view, title, caption, canvasImages, orientation, bgColor, imageMargin, categories } = config;
+  const {
+    view,
+    title,
+    caption,
+    canvasImages,
+    orientation,
+    bgColor,
+    imageMargin,
+    categories,
+  } = config;
 
   const [draftIndicator, setDraftIndicator] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
-  const lastSavedDraftHash = useRef<string>('');
+  const lastSavedDraftHash = useRef<string>("");
 
   // Load any pending draft on mount
   useEffect(() => {
-    loadDraft().then((d) => {
-      if (d) setPendingDraft(d);
-    }).catch(() => {});
+    loadDraft()
+      .then((d) => {
+        if (d) setPendingDraft(d);
+      })
+      .catch(() => {});
   }, []);
 
   // Interval-based auto-save with fingerprint comparison
   useEffect(() => {
-    if (view !== 'manual' || canvasImages.length === 0) return;
+    if (view !== "manual" || canvasImages.length === 0) return;
     const timer = setInterval(() => {
       const hash = JSON.stringify([
         title.trim(),
         caption.trim(),
-        canvasImages.map((img) => [img.id, img.x, img.y, img.width, img.height, img.rotation, img.zIndex, img.pinned]),
+        canvasImages.map((img) => [
+          img.id,
+          img.x,
+          img.y,
+          img.width,
+          img.height,
+          img.rotation,
+          img.zIndex,
+          img.pinned,
+        ]),
         orientation,
         bgColor,
         imageMargin,
@@ -54,7 +78,7 @@ export function useAutoSave(config: AutoSaveConfig) {
       if (hash === lastSavedDraftHash.current) return;
 
       const draft: Draft = {
-        id: 'current',
+        id: "current",
         title: title.trim(),
         caption: caption.trim(),
         images: canvasImages,
@@ -64,14 +88,25 @@ export function useAutoSave(config: AutoSaveConfig) {
         categories,
         savedAt: new Date().toISOString(),
       };
-      saveDraft(draft).then(() => {
-        lastSavedDraftHash.current = hash;
-        setDraftIndicator('Draft saved');
-        setTimeout(() => setDraftIndicator(null), 1500);
-      }).catch(() => {});
+      saveDraft(draft)
+        .then(() => {
+          lastSavedDraftHash.current = hash;
+          setDraftIndicator("Draft saved");
+          setTimeout(() => setDraftIndicator(null), 1500);
+        })
+        .catch(() => {});
     }, AUTOSAVE_MS);
     return () => clearInterval(timer);
-  }, [view, title, caption, canvasImages, orientation, bgColor, imageMargin, categories]);
+  }, [
+    view,
+    title,
+    caption,
+    canvasImages,
+    orientation,
+    bgColor,
+    imageMargin,
+    categories,
+  ]);
 
   /** Dismiss the pending draft and delete it from storage. */
   const dismissDraft = useCallback(() => {

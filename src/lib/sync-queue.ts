@@ -7,7 +7,7 @@
  * reconnect, the latest local artworks for those IDs are pushed to the cloud.
  */
 
-const QUEUE_KEY = 'moodboard-sync-queue';
+const QUEUE_KEY = "moodboard-sync-queue";
 
 export interface SyncQueueEntry {
   /** IDs of artworks that need to be synced */

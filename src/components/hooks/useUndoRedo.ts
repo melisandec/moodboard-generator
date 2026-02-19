@@ -1,8 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
-  stripDataUrls, rehydrateImages,
-  type CanvasImage, type LightCanvasImage,
-} from '@/lib/storage';
+  stripDataUrls,
+  rehydrateImages,
+  type CanvasImage,
+  type LightCanvasImage,
+} from "@/lib/storage";
 
 const MAX_HISTORY = 50;
 
@@ -38,7 +40,10 @@ export function useUndoRedo(
 
   /** Push the current state onto the undo stack (call before mutations). */
   const commitSnapshot = useCallback(() => {
-    setUndoStack((prev) => [...prev.slice(-(MAX_HISTORY - 1)), stripDataUrls(canvasImages)]);
+    setUndoStack((prev) => [
+      ...prev.slice(-(MAX_HISTORY - 1)),
+      stripDataUrls(canvasImages),
+    ]);
     setRedoStack([]);
   }, [canvasImages]);
 

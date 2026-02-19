@@ -1,23 +1,26 @@
-import { createClient } from '@farcaster/quick-auth';
-import { NextResponse } from 'next/server';
+import { createClient } from "@farcaster/quick-auth";
+import { NextResponse } from "next/server";
 
 const quickAuth = createClient();
 
-const APP_DOMAIN = process.env.APP_DOMAIN || 'moodboard-generator-phi.vercel.app';
+const APP_DOMAIN =
+  process.env.APP_DOMAIN || "moodboard-generator-phi.vercel.app";
 
-export async function verifyAuth(req: Request): Promise<{ fid: number } | null> {
-  const authorization = req.headers.get('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    console.warn('verifyAuth: no Bearer token in request');
+export async function verifyAuth(
+  req: Request,
+): Promise<{ fid: number } | null> {
+  const authorization = req.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) {
+    console.warn("verifyAuth: no Bearer token in request");
     return null;
   }
 
   try {
-    const token = authorization.split(' ')[1];
+    const token = authorization.split(" ")[1];
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
     return { fid: payload.sub };
   } catch (err) {
-    console.error('verifyAuth: JWT verification failed:', err);
+    console.error("verifyAuth: JWT verification failed:", err);
     return null;
   }
 }
@@ -28,19 +31,19 @@ export async function verifyAuth(req: Request): Promise<{ fid: number } | null> 
 
 const ALLOWED_ORIGINS = new Set([
   `https://${APP_DOMAIN}`,
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
 ]);
 
 export function checkOrigin(req: Request): boolean {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   if (!origin) return true; // server-to-server or same-origin navigation
   return ALLOWED_ORIGINS.has(origin);
 }
 
 export function originDenied() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
 // ---------------------------------------------------------------------------
@@ -65,9 +68,9 @@ function cleanupExpiredBuckets(now: number) {
 
 export function rateLimit(req: Request, max = RATE_MAX): NextResponse | null {
   const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    'unknown';
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
 
   const now = Date.now();
 
@@ -85,8 +88,8 @@ export function rateLimit(req: Request, max = RATE_MAX): NextResponse | null {
 
   if (bucket.count > max) {
     return NextResponse.json(
-      { error: 'Too many requests, try again later' },
-      { status: 429, headers: { 'Retry-After': '60' } },
+      { error: "Too many requests, try again later" },
+      { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 

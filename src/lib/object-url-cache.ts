@@ -18,12 +18,12 @@ export function getObjectUrl(id: string, dataUrl: string): string {
   if (existing) return existing;
 
   try {
-    const commaIdx = dataUrl.indexOf(',');
+    const commaIdx = dataUrl.indexOf(",");
     if (commaIdx === -1) return dataUrl; // not a data URL, return as-is
 
     const header = dataUrl.substring(0, commaIdx);
     const base64 = dataUrl.substring(commaIdx + 1);
-    const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+    const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
 
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);

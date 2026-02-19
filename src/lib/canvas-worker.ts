@@ -7,7 +7,7 @@
  */
 
 export interface RenderRequest {
-  type: 'renderToBlob' | 'renderThumbnail';
+  type: "renderToBlob" | "renderThumbnail";
   images: Array<{
     blob: Blob;
     x: number;
@@ -29,12 +29,12 @@ export interface RenderRequest {
 }
 
 export interface RenderResponse {
-  type: 'result';
+  type: "result";
   blob: Blob;
 }
 
 export interface RenderError {
-  type: 'error';
+  type: "error";
   message: string;
 }
 
@@ -42,10 +42,14 @@ export interface RenderError {
 // Text drawing (mirrored from canvas.ts for worker isolation)
 // ---------------------------------------------------------------------------
 
-function wrapText(ctx: OffscreenCanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(' ');
+function wrapText(
+  ctx: OffscreenCanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const words = text.split(" ");
   const lines: string[] = [];
-  let current = '';
+  let current = "";
   for (const word of words) {
     const test = current ? `${current} ${word}` : word;
     if (ctx.measureText(test).width > maxWidth && current) {
@@ -60,7 +64,7 @@ function wrapText(ctx: OffscreenCanvasRenderingContext2D, text: string, maxWidth
 }
 
 function isDark(hex: string) {
-  const c = hex.replace('#', '');
+  const c = hex.replace("#", "");
   const r = parseInt(c.substring(0, 2), 16);
   const g = parseInt(c.substring(2, 4), 16);
   const b = parseInt(c.substring(4, 6), 16);
@@ -83,9 +87,11 @@ function drawTitleCaption(
   if (caption) {
     const sz = Math.round(width * 0.017);
     ctx.font = `300 ${sz}px sans-serif`;
-    ctx.fillStyle = darkBg ? `rgba(255,255,255,${alpha * 0.6})` : 'rgba(0,0,0,0.3)';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = darkBg
+      ? `rgba(255,255,255,${alpha * 0.6})`
+      : "rgba(0,0,0,0.3)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
     for (const l of wrapText(ctx, caption, maxW).reverse()) {
       ctx.fillText(l, pad, y);
       y -= sz + 4;
@@ -96,9 +102,11 @@ function drawTitleCaption(
   if (title) {
     const sz = Math.round(width * 0.023);
     ctx.font = `400 ${sz}px sans-serif`;
-    ctx.fillStyle = darkBg ? `rgba(255,255,255,${alpha * 0.85})` : 'rgba(0,0,0,0.45)';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = darkBg
+      ? `rgba(255,255,255,${alpha * 0.85})`
+      : "rgba(0,0,0,0.45)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
     for (const l of wrapText(ctx, title, maxW).reverse()) {
       ctx.fillText(l, pad, y);
       y -= sz + 4;
@@ -119,8 +127,8 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
 
     // Create OffscreenCanvas
     const canvas = new OffscreenCanvas(w, h);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2d context');
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get 2d context");
 
     // Fill background
     ctx.fillStyle = req.bgColor;
@@ -136,7 +144,9 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
       .map((img, i) => ({ ...img, bitmap: bitmaps[i] }))
       .sort((a, b) => a.zIndex - b.zIndex);
 
-    const borderPx = req.margin ? Math.max(req.type === 'renderThumbnail' ? 1 : 2, w * 0.003) : 0;
+    const borderPx = req.margin
+      ? Math.max(req.type === "renderThumbnail" ? 1 : 2, w * 0.003)
+      : 0;
 
     for (const im of sorted) {
       ctx.save();
@@ -147,31 +157,44 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
       ctx.translate(sx + sw / 2, sy + sh / 2);
       ctx.rotate((im.rotation * Math.PI) / 180);
       if (borderPx > 0) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-sw / 2 - borderPx, -sh / 2 - borderPx, sw + borderPx * 2, sh + borderPx * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(
+          -sw / 2 - borderPx,
+          -sh / 2 - borderPx,
+          sw + borderPx * 2,
+          sh + borderPx * 2,
+        );
       }
       ctx.drawImage(im.bitmap, -sw / 2, -sh / 2, sw, sh);
       ctx.restore();
     }
 
     // Draw title/caption for full renders (not thumbnails)
-    if (req.type === 'renderToBlob' && (req.title || req.caption)) {
-      drawTitleCaption(ctx, req.title ?? '', req.caption ?? '', w, h, isDark(req.bgColor));
+    if (req.type === "renderToBlob" && (req.title || req.caption)) {
+      drawTitleCaption(
+        ctx,
+        req.title ?? "",
+        req.caption ?? "",
+        w,
+        h,
+        isDark(req.bgColor),
+      );
     }
 
     // Close bitmaps
     for (const bm of bitmaps) bm.close();
 
     // Convert to blob
-    const quality = req.quality ?? (req.type === 'renderThumbnail' ? 0.6 : 0.85);
-    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+    const quality =
+      req.quality ?? (req.type === "renderThumbnail" ? 0.6 : 0.85);
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
 
-    const response: RenderResponse = { type: 'result', blob };
+    const response: RenderResponse = { type: "result", blob };
     (self as unknown as Worker).postMessage(response);
   } catch (err) {
     const response: RenderError = {
-      type: 'error',
-      message: err instanceof Error ? err.message : 'Unknown worker error',
+      type: "error",
+      message: err instanceof Error ? err.message : "Unknown worker error",
     };
     (self as unknown as Worker).postMessage(response);
   }

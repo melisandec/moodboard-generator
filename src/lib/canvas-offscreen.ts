@@ -4,8 +4,12 @@
  * thread when OffscreenCanvas or Web Workers are unavailable.
  */
 
-import type { CanvasImage } from './storage';
-import type { RenderRequest, RenderResponse, RenderError } from './canvas-worker';
+import type { CanvasImage } from "./storage";
+import type {
+  RenderRequest,
+  RenderResponse,
+  RenderError,
+} from "./canvas-worker";
 
 // ---------------------------------------------------------------------------
 // Worker lifecycle
@@ -18,14 +22,14 @@ function getWorker(): Worker | null {
   if (workerFailed) return null;
 
   // Check for OffscreenCanvas support (required in the worker)
-  if (typeof OffscreenCanvas === 'undefined') {
+  if (typeof OffscreenCanvas === "undefined") {
     workerFailed = true;
     return null;
   }
 
   if (!worker) {
     try {
-      worker = new Worker(new URL('./canvas-worker.ts', import.meta.url));
+      worker = new Worker(new URL("./canvas-worker.ts", import.meta.url));
       worker.onerror = () => {
         workerFailed = true;
         worker = null;
@@ -44,10 +48,10 @@ function getWorker(): Worker | null {
 // ---------------------------------------------------------------------------
 
 function dataUrlToBlob(dataUrl: string): Blob {
-  const commaIdx = dataUrl.indexOf(',');
+  const commaIdx = dataUrl.indexOf(",");
   const header = dataUrl.substring(0, commaIdx);
   const base64 = dataUrl.substring(commaIdx + 1);
-  const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -62,25 +66,25 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 function renderInWorker(request: RenderRequest): Promise<Blob> {
   const w = getWorker();
-  if (!w) return Promise.reject(new Error('Worker unavailable'));
+  if (!w) return Promise.reject(new Error("Worker unavailable"));
 
   return new Promise<Blob>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error('Worker render timeout'));
+      reject(new Error("Worker render timeout"));
     }, 30_000);
 
     const handler = (e: MessageEvent<RenderResponse | RenderError>) => {
       clearTimeout(timeout);
-      w.removeEventListener('message', handler);
+      w.removeEventListener("message", handler);
 
-      if (e.data.type === 'error') {
+      if (e.data.type === "error") {
         reject(new Error(e.data.message));
       } else {
         resolve(e.data.blob);
       }
     };
 
-    w.addEventListener('message', handler);
+    w.addEventListener("message", handler);
     w.postMessage(request);
   });
 }
@@ -107,11 +111,11 @@ export async function renderMoodboardToBlobOffscreen(
   mainThreadFallback: () => Promise<Blob>,
 ): Promise<Blob> {
   // Try the worker path first
-  if (!workerFailed && typeof OffscreenCanvas !== 'undefined') {
+  if (!workerFailed && typeof OffscreenCanvas !== "undefined") {
     try {
       const scale = Math.min(1, 1200 / cw);
       const request: RenderRequest = {
-        type: 'renderToBlob',
+        type: "renderToBlob",
         images: images.map((img) => ({
           blob: dataUrlToBlob(img.dataUrl),
           x: img.x,
@@ -152,11 +156,11 @@ export async function renderThumbnailOffscreen(
   /** Called when the worker is unavailable */
   mainThreadFallback: () => Promise<string>,
 ): Promise<string> {
-  if (!workerFailed && typeof OffscreenCanvas !== 'undefined') {
+  if (!workerFailed && typeof OffscreenCanvas !== "undefined") {
     try {
       const scale = Math.min(1, 200 / cw);
       const request: RenderRequest = {
-        type: 'renderThumbnail',
+        type: "renderThumbnail",
         images: images.map((img) => ({
           blob: dataUrlToBlob(img.dataUrl),
           x: img.x,

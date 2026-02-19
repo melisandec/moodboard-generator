@@ -42,7 +42,7 @@ A Farcaster mini-app for creating, composing, and sharing moodboard collages. Us
 | Auth           | Farcaster Quick Auth (JWT)          | ^0.0.8  |
 | Farcaster SDK  | @farcaster/miniapp-sdk              | ^0.2.3  |
 | Canvas         | HTML5 Canvas API                    | —       |
-| Hosting        | Vercel (serverless functions)        | —       |
+| Hosting        | Vercel (serverless functions)       | —       |
 
 Minimal runtime dependencies. No component library, no state management library, no image processing library — canvas rendering, compression, and color extraction are hand-rolled.
 
@@ -74,17 +74,27 @@ moodboard-generator/
 │   │   ├── layout.tsx              # Root layout, viewport meta, Farcaster metadata, CloudProvider
 │   │   └── page.tsx                # Renders <MoodboardGenerator />
 │   ├── components/
-│   │   ├── MoodboardGenerator.tsx  # Main app component (views, state, all features)
+│   │   ├── MoodboardGenerator.tsx  # Main app component (views, UI, delegates logic to hooks)
 │   │   ├── InteractiveCanvas.tsx   # Drag/resize/pin canvas for manual mode
 │   │   ├── ImageLibrary.tsx        # Image library view (search, tags, multi-select)
-│   │   └── CloudProvider.tsx       # Cloud auth context, sync orchestration
+│   │   ├── CloudProvider.tsx       # Cloud auth context, sync orchestration, offline queue
+│   │   └── hooks/
+│   │       ├── useUndoRedo.ts      # Undo/redo stacks with lightweight metadata snapshots
+│   │       ├── useAutoSave.ts      # 30s interval draft persistence with dirty detection
+│   │       ├── useCanvasExport.ts  # Download, print, and Farcaster cast operations
+│   │       ├── useCollectionManager.ts # Collection CRUD, search/sort/filter, pin, duplicate
+│   │       └── useImageManagement.ts   # File input, previews, generate, add-to-canvas
 │   └── lib/
 │       ├── auth.ts                 # Server-side JWT verification, rate limiting, origin validation
 │       ├── canvas.ts               # Image loading, rendering, compression, thumbnails, color extraction
+│       ├── canvas-offscreen.ts     # Main-thread wrapper delegating rendering to Web Worker
+│       ├── canvas-worker.ts        # Web Worker for OffscreenCanvas rendering (export + thumbnails)
 │       ├── cloud.ts                # Cloud sync logic (push/pull, image upload, parallel operations)
 │       ├── db.ts                   # Turso database client (Drizzle + libSQL)
+│       ├── object-url-cache.ts     # Blob URL cache for memory-efficient image rendering
 │       ├── schema.ts              # Drizzle ORM schema (users, moodboards, images tables)
-│       ├── storage.ts              # IndexedDB wrapper, TypeScript interfaces, image hashing
+│       ├── storage.ts              # IndexedDB wrapper with in-memory fallback, TypeScript interfaces
+│       ├── sync-queue.ts           # Offline sync queue with localStorage persistence
 │       └── templates.ts            # Built-in templates, apply/create/preview utilities
 ├── drizzle.config.ts               # Drizzle Kit config for Turso
 ├── next.config.ts                  # React Compiler enabled
@@ -97,7 +107,7 @@ moodboard-generator/
 
 ### File Responsibilities
 
-**`src/lib/storage.ts`** — Local data layer. Defines all TypeScript interfaces (`CanvasImage`, `LightCanvasImage`, `Artwork`, `Template`, `Draft`, `LibraryImage`, `Orientation`, `TemplateSlot`). Wraps IndexedDB (v3) with generic helpers. Exposes CRUD for `artworks`, `templates`, `draft`, and `library` object stores. Provides `imageHash()` for content-based deduplication (FNV-1a), `ensureInLibrary()` for automatic library ingestion, and `stripDataUrls()`/`rehydrateImages()` for lightweight undo snapshots.
+**`src/lib/storage.ts`** — Local data layer. Defines all TypeScript interfaces (`CanvasImage`, `LightCanvasImage`, `Artwork`, `Template`, `Draft`, `LibraryImage`, `Orientation`, `TemplateSlot`). Wraps IndexedDB (v3) with generic helpers and an automatic **in-memory `Map` fallback** when IndexedDB is unavailable (e.g. private browsing). Exposes `isIndexedDBAvailable()` for probing storage, CRUD for `artworks`, `templates`, `draft`, and `library` object stores, `imageHash()` for content-based deduplication (FNV-1a), `ensureInLibrary()` for automatic library ingestion, and `stripDataUrls()`/`rehydrateImages()` for lightweight undo snapshots.
 
 **`src/lib/canvas.ts`** — Image processing and rendering. Contains the auto-generate collage algorithm (`generatePlacements`), the manual-mode renderer (`renderManualMoodboard`), the cast blob renderer (`renderMoodboardToBlob`), collection thumbnail generator (`renderThumbnail`), image compression for storage (`compressForStorage`) and upload (`compressForUpload`), initial scatter layout (`createInitialPlacements`), and the dominant color extraction pipeline (`extractColors`).
 
@@ -105,19 +115,37 @@ moodboard-generator/
 
 **`src/lib/cloud.ts`** — Cloud sync logic. Handles `pushToCloud` (with incremental sync support via `since` timestamp), `pullFromCloud` (parallel IPFS image fetching), `registerUser`, and image upload with client-side compression. Uses a concurrent task runner (`runConcurrent`) with configurable parallelism (default 3) for both uploads and downloads.
 
-**`src/lib/auth.ts`** — Server-side security. JWT verification via `@farcaster/quick-auth`, origin validation against allowed domains, and IP-based rate limiting (sliding window, 60s buckets).
+**`src/lib/auth.ts`** — Server-side security. JWT verification via `@farcaster/quick-auth`, origin validation against allowed domains, and IP-based rate limiting (sliding window, 60s buckets, periodic 5-minute cleanup to prevent memory leaks).
 
 **`src/lib/schema.ts`** — Drizzle ORM schema for Turso. Defines `users`, `moodboards`, and `images` tables with indexes for efficient queries by `fid` and `updatedAt`.
 
 **`src/lib/db.ts`** — Turso database client. Creates a `drizzle` instance from `@libsql/client` using env vars for URL and auth token.
 
-**`src/components/InteractiveCanvas.tsx`** — The interactive canvas. Handles drag (Pointer Events), selection, resize (+/- buttons), pin/unpin toggle, delete, and z-index layering. Floating toolbar auto-flips below the image when near the top edge of the canvas. Accepts `bgColor`, `imageMargin`, and `onCommit` props.
+**`src/components/InteractiveCanvas.tsx`** — The interactive canvas. Handles drag (Pointer Events), selection, resize (+/- buttons), pin/unpin toggle, delete, and z-index layering. Floating toolbar auto-flips below the image when near the top edge of the canvas. Uses the Object URL cache for memory-efficient image rendering. Accepts `bgColor`, `imageMargin`, and `onCommit` props.
 
 **`src/components/ImageLibrary.tsx`** — Full-screen image library view. Grid layout with search, tag filtering, sort (newest/oldest/name), multi-select, tag editing, and "Add to Canvas" action. Images are deduplicated by content hash.
 
-**`src/components/CloudProvider.tsx`** — React context for cloud state. Manages Farcaster user detection (via `sdk.context`), authenticated API calls (`authFetch` using Quick Auth), sync orchestration with lock mechanism, and auto-sync on login. Provides `user`, `syncStatus`, `signIn`, `signOut`, and `sync` to children.
+**`src/components/CloudProvider.tsx`** — React context for cloud state. Manages Farcaster user detection (via `sdk.context`), authenticated API calls (`authFetch` using Quick Auth), sync orchestration with lock mechanism (queued sync to prevent race conditions), offline detection via `online`/`offline` events, and integration with the offline sync queue. Auto-syncs on login and auto-drains the queue on reconnect. Provides `user`, `syncStatus`, `signIn`, `signOut`, and `sync` to children.
 
-**`src/components/MoodboardGenerator.tsx`** — The main application. Manages four views (`create`, `auto-result`, `manual`, `library`), all application state, lightweight undo/redo stacks with image store ref, toolbar panels, categories, auto-save drafts, the visual collection grid with thumbnails, delete confirmation, and all export actions.
+**`src/components/MoodboardGenerator.tsx`** — The main application. Manages four views (`create`, `auto-result`, `manual`, `library`), core UI state, toolbar panels, categories, templates, and orientation switching. Domain logic is delegated to five extracted hooks (see below). Renders the storage-unavailable warning banner, draft recovery banner, and all view-specific JSX.
+
+**`src/components/hooks/useUndoRedo.ts`** — Extracted undo/redo logic. Maintains lightweight metadata stacks (`LightCanvasImage[][]`) with a separate `imageStoreRef` map for blob data. Provides `commitSnapshot()`, `undo()`, `redo()`, and `clearHistory()`. Maximum 50 history levels.
+
+**`src/components/hooks/useAutoSave.ts`** — Extracted auto-save draft logic. Runs a 30-second interval in manual view, builds a JSON fingerprint of current state to skip saves when nothing changed, manages the pending-draft recovery state, and provides `dismissDraft()`, `consumeDraft()`, and `clearCurrentDraft()`.
+
+**`src/components/hooks/useCanvasExport.ts`** — Extracted export operations. Handles download (Web Share API with anchor fallback), print (new window with auto-print), and Farcaster cast (render → IPFS upload → compose). Manages `castStatus` for step-by-step feedback.
+
+**`src/components/hooks/useCollectionManager.ts`** — Extracted collection management. Owns saved artworks state, search/sort/filter, category derivation, pin toggling, delete confirmation, load-for-editing, and duplicate. Automatically refreshes after cloud sync. Handles `saveToCollection` including thumbnail generation via OffscreenCanvas.
+
+**`src/components/hooks/useImageManagement.ts`** — Extracted image input and canvas population. Manages file state, preview URLs, refs for file inputs, auto-generate mode, enter-manual-mode flow, add-from-library, and direct file-add in manual mode. Provides `canGenerate` derived flag.
+
+**`src/lib/sync-queue.ts`** — Offline sync queue. Persists pending artwork IDs in `localStorage` under key `moodboard-sync-queue`. Provides `enqueueSync(artworkIds)`, `clearSyncQueue()`, `getPendingArtworkIds()`, and `hasPendingSync()`. Used by `CloudProvider` to buffer sync requests when offline.
+
+**`src/lib/object-url-cache.ts`** — Blob URL cache. Converts base64 data URLs to native `Blob` URLs via `URL.createObjectURL()` for memory-efficient `<img>` rendering. Provides `getObjectUrl(id, dataUrl)`, `releaseObjectUrl(id)`, `reconcileObjectUrls(activeIds)`, and `releaseAllObjectUrls()`. Used by `InteractiveCanvas`.
+
+**`src/lib/canvas-worker.ts`** — Web Worker for OffscreenCanvas rendering. Handles moodboard export and thumbnail generation off the main thread. Accepts `RenderRequest` messages, renders to `OffscreenCanvas`, returns `Blob` or data URL via `RenderResponse`.
+
+**`src/lib/canvas-offscreen.ts`** — Main-thread wrapper for the canvas worker. Provides `renderMoodboardToBlobOffscreen()` and `renderThumbnailOffscreen()`, both accepting a `mainThreadFallback` function for browsers without OffscreenCanvas support.
 
 ---
 
@@ -195,6 +223,7 @@ Renders a collage using `renderMoodboard()` with an organic scatter algorithm. G
 ### Interactive Manual Mode
 
 Full interactive composition surface with:
+
 - **Drag**: Pointer Events with window-level listeners for smooth off-element dragging
 - **Selection**: Blue ring indicator, auto-bring-to-front
 - **Resize**: +/- buttons (0.85× / 1.18×), aspect-ratio locked, clamped 30px–95% of canvas width
@@ -206,11 +235,11 @@ Full interactive composition surface with:
 
 ### Canvas Format
 
-| Format          | Dimensions   | Aspect Ratio | Icon        |
-| --------------- | ------------ | ------------ | ----------- |
-| Tall rectangle  | 1080 × 1527 | 1 : √2 (A4)  | Vertical bar |
-| Long rectangle  | 1527 × 1080 | √2 : 1 (A4)  | Horizontal bar |
-| Square          | 1080 × 1080 | 1 : 1        | Square      |
+| Format         | Dimensions  | Aspect Ratio | Icon           |
+| -------------- | ----------- | ------------ | -------------- |
+| Tall rectangle | 1080 × 1527 | 1 : √2 (A4)  | Vertical bar   |
+| Long rectangle | 1527 × 1080 | √2 : 1 (A4)  | Horizontal bar |
+| Square         | 1080 × 1080 | 1 : 1        | Square         |
 
 Switching format proportionally rescales all positions and sizes.
 
@@ -222,7 +251,7 @@ Keyboard shortcuts: `Cmd+Z` / `Ctrl+Z` for undo, `Cmd+Shift+Z` / `Ctrl+Y` for re
 
 ### Auto-Save Drafts
 
-Every 30 seconds in manual mode, the current state is saved to IndexedDB (`draft` store, single entry with id `'current'`). On app load, if a draft exists, a recovery banner appears: "Unsaved work found — Recover / Dismiss". Draft is cleared on intentional save, export, or cast.
+Every 30 seconds in manual mode, the current state is saved to IndexedDB (`draft` store, single entry with id `'current'`). Uses **fingerprint-based dirty detection**: a JSON hash of the current state (title, caption, image IDs/positions, orientation, bgColor, margin, categories) is compared to the last saved fingerprint, so saves are skipped when nothing has changed. On app load, if a draft exists, a recovery banner appears: "Unsaved work found — Recover / Dismiss". Draft is cleared on intentional save, export, or cast.
 
 ### Moodboard Categorization
 
@@ -231,6 +260,7 @@ Every 30 seconds in manual mode, the current state is saved to IndexedDB (`draft
 ### Image Library
 
 Separate full-screen view accessible from create view and manual toolbar. Features:
+
 - Grid layout (3 columns mobile, 4 on wider screens)
 - Search by filename or tags
 - Tag filtering with chip-based selector
@@ -244,6 +274,7 @@ Separate full-screen view accessible from create view and manual toolbar. Featur
 ### Collection View
 
 Visual thumbnail grid (2 columns mobile, 3 wider) replacing the previous text list. Each card shows:
+
 - JPEG thumbnail preview (generated on save, ~200px wide)
 - Title, date, category chips
 - Pin indicator for favorites
@@ -278,6 +309,7 @@ Toggle adds a clean white border around each image. Display uses CSS `box-shadow
 **Print**: Opens a new window with print-optimized HTML, auto-triggers `window.print()`.
 
 **Cast to Farcaster**:
+
 1. Renders moodboard to compressed JPEG blob (max 1200px, 85% quality) via `renderMoodboardToBlob`
 2. Uploads blob to Pinata IPFS via `/api/cast-image` (FormData)
 3. Opens Farcaster compose with text + IPFS image URL embed via `sdk.actions.composeCast`
@@ -302,6 +334,9 @@ Toggle adds a clean white border around each image. Display uses CSS `box-shadow
 - **Image deduplication**: Content hash prevents re-uploading identical images
 - **Status indicators**: "Syncing…", "Synced", "Retry" with cloud icon variants
 - **Auto-sync**: Triggers automatically when user is detected on app load
+- **Offline queue**: When the device is offline, pending artwork IDs are persisted in `localStorage` (`moodboard-sync-queue`). The queue auto-drains when connectivity is restored via the `online` event
+- **Queued sync**: If a sync is already in progress, the next request is queued (via a Promise chain) and runs automatically when the current sync completes, preventing race conditions
+- **Offline detection**: `navigator.onLine` + `online`/`offline` event listeners in `CloudProvider`
 
 ---
 
@@ -311,20 +346,20 @@ Toggle adds a clean white border around each image. Display uses CSS `box-shadow
 
 ```typescript
 interface CanvasImage {
-  id: string;           // Unique ID (e.g., "img-1708000000000-abc123")
-  dataUrl: string;      // JPEG data URL (compressed to max 1000px, 80% quality)
-  x: number;            // Logical x position on canvas
-  y: number;            // Logical y position on canvas
-  width: number;        // Logical width
-  height: number;       // Logical height
-  rotation: number;     // Degrees (always 0 in manual mode)
-  pinned: boolean;      // Lock state
-  zIndex: number;       // Layer order
+  id: string; // Unique ID (e.g., "img-1708000000000-abc123")
+  dataUrl: string; // JPEG data URL (compressed to max 1000px, 80% quality)
+  x: number; // Logical x position on canvas
+  y: number; // Logical y position on canvas
+  width: number; // Logical width
+  height: number; // Logical height
+  rotation: number; // Degrees (always 0 in manual mode)
+  pinned: boolean; // Lock state
+  zIndex: number; // Layer order
   naturalWidth: number; // Original (compressed) width
-  naturalHeight: number;// Original (compressed) height
+  naturalHeight: number; // Original (compressed) height
 }
 
-type LightCanvasImage = Omit<CanvasImage, 'dataUrl'>; // For undo/redo stack
+type LightCanvasImage = Omit<CanvasImage, "dataUrl">; // For undo/redo stack
 ```
 
 ### Artwork
@@ -337,14 +372,14 @@ interface Artwork {
   images: CanvasImage[];
   canvasWidth: number;
   canvasHeight: number;
-  format: 'tall' | 'long' | 'square';
+  format: "tall" | "long" | "square";
   bgColor: string;
   imageMargin: boolean;
   categories: string[];
   pinned: boolean;
-  createdAt: string;   // ISO 8601
-  updatedAt: string;   // ISO 8601
-  thumbnail?: string;  // Small JPEG data URL for collection preview
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
+  thumbnail?: string; // Small JPEG data URL for collection preview
 }
 ```
 
@@ -352,7 +387,7 @@ interface Artwork {
 
 ```typescript
 interface Draft {
-  id: 'current';       // Always single entry
+  id: "current"; // Always single entry
   title: string;
   caption: string;
   images: CanvasImage[];
@@ -368,7 +403,7 @@ interface Draft {
 
 ```typescript
 interface LibraryImage {
-  id: string;           // Content hash (FNV-1a)
+  id: string; // Content hash (FNV-1a)
   dataUrl: string;
   filename: string;
   naturalWidth: number;
@@ -382,8 +417,8 @@ interface LibraryImage {
 
 ```typescript
 interface TemplateSlot {
-  cx: number;    // Center x as fraction (0–1)
-  cy: number;    // Center y as fraction (0–1)
+  cx: number; // Center x as fraction (0–1)
+  cy: number; // Center y as fraction (0–1)
   scale: number; // Width as fraction of canvas width
   rotation: number;
   zIndex: number;
@@ -407,20 +442,20 @@ Database name: `moodboard-artworks`, version 3.
 
 | Object Store | Key Path | Content                                          |
 | ------------ | -------- | ------------------------------------------------ |
-| `artworks`   | `id`     | Full `Artwork` objects including image data URLs  |
-| `templates`  | `id`     | User-created `Template` objects                   |
+| `artworks`   | `id`     | Full `Artwork` objects including image data URLs |
+| `templates`  | `id`     | User-created `Template` objects                  |
 | `draft`      | `id`     | Single auto-save draft entry (id: `'current'`)   |
-| `library`    | `id`     | `LibraryImage` objects (deduplicated by hash)     |
+| `library`    | `id`     | `LibraryImage` objects (deduplicated by hash)    |
 
 A shared `openDB()` helper handles version upgrades. Generic `idbPut`, `idbGetAll`, `idbGet`, `idbDelete` helpers avoid code duplication.
 
 ### Cloud (Turso + Pinata IPFS)
 
-| Service | Purpose | Free Tier |
-| ------- | ------- | --------- |
+| Service | Purpose                                       | Free Tier        |
+| ------- | --------------------------------------------- | ---------------- |
 | Turso   | Metadata (users, moodboard state, image refs) | 9GB, 1B reads/mo |
-| Pinata  | Image binary storage (IPFS) | 1GB |
-| Vercel  | Hosting + serverless functions | 100GB bandwidth |
+| Pinata  | Image binary storage (IPFS)                   | 1GB              |
+| Vercel  | Hosting + serverless functions                | 100GB bandwidth  |
 
 Cloud storage separates image binaries (IPFS) from moodboard metadata (Turso). Canvas state stores `imageHash` references instead of raw data URLs. On pull, images are fetched from IPFS and converted back to data URLs.
 
@@ -477,6 +512,7 @@ Client                          Server (Vercel)              Cloud
 ### Image Compression Pipeline
 
 All images are compressed client-side before upload:
+
 - **For storage** (`compressForStorage`): Max 1000px, JPEG 80%
 - **For IPFS upload** (`compressForUpload`): Max 2048px, JPEG 82%
 - **For cast image** (`renderMoodboardToBlob`): Max 1200px, JPEG 85%
@@ -542,6 +578,7 @@ Server (API route)
 ### Origin Validation
 
 All API routes call `checkOrigin(req)` which validates the `Origin` header against an allowlist:
+
 - Production: `https://moodboard-generator-phi.vercel.app`
 - Development: `http://localhost:3000`, `:3001`, `:3002`
 
@@ -550,23 +587,24 @@ Requests with non-matching origins receive 403 Forbidden.
 ### Rate Limiting
 
 The `/api/cast-image` endpoint (public, no auth) has IP-based rate limiting:
+
 - Sliding window: 60 seconds
 - Max requests: 10 per window per IP
 - In-memory `Map<string, { count, resetAt }>`
-- Auto-cleanup when map exceeds 10,000 entries
+- Periodic cleanup every 5 minutes via `cleanupExpiredBuckets()` to prevent memory leaks (replaces previous threshold-based cleanup)
 - Returns 429 with `Retry-After: 60` header when exceeded
 
 ### Environment Variables
 
 Secrets are stored in `.env.local` (gitignored). The `.env` file contains only placeholder templates.
 
-| Variable | Purpose |
-| -------- | ------- |
-| `TURSO_DATABASE_URL` | Turso database connection URL |
-| `TURSO_AUTH_TOKEN` | Turso auth token |
-| `PINATA_JWT` | Pinata API key for IPFS uploads |
-| `PINATA_GATEWAY` | Pinata dedicated gateway domain |
-| `APP_DOMAIN` | Domain for Quick Auth JWT verification |
+| Variable             | Purpose                                |
+| -------------------- | -------------------------------------- |
+| `TURSO_DATABASE_URL` | Turso database connection URL          |
+| `TURSO_AUTH_TOKEN`   | Turso auth token                       |
+| `PINATA_JWT`         | Pinata API key for IPFS uploads        |
+| `PINATA_GATEWAY`     | Pinata dedicated gateway domain        |
+| `APP_DOMAIN`         | Domain for Quick Auth JWT verification |
 
 All variables must also be set in Vercel dashboard for production deployment.
 
@@ -608,6 +646,26 @@ CanvasImage[] → scale to ~200px wide → render all images (no title/caption)
   → canvas.toDataURL('image/jpeg', 0.6) → small data URL stored with artwork
 ```
 
+### OffscreenCanvas Web Worker
+
+For moodboard export and thumbnail generation, rendering can be offloaded to a Web Worker using `OffscreenCanvas` to avoid blocking the main thread:
+
+```
+CanvasImage[] → canvas-offscreen.ts → postMessage(RenderRequest) → Web Worker (canvas-worker.ts)
+  → OffscreenCanvas → Blob or dataURL → postMessage(RenderResponse) back to main thread
+  → Falls back to main-thread canvas rendering if OffscreenCanvas is unsupported
+```
+
+`renderMoodboardToBlobOffscreen()` and `renderThumbnailOffscreen()` each accept a `mainThreadFallback` function for graceful degradation.
+
+### Object URL Cache
+
+The `InteractiveCanvas` uses a Blob URL cache (`object-url-cache.ts`) to convert base64 data URLs to native `Blob` URLs via `URL.createObjectURL()`. This dramatically reduces JS heap usage for large canvases. URLs are reconciled on canvas update and released on unmount.
+
+### Lazy-Loaded Collection Thumbnails
+
+Collection grid thumbnail `<img>` elements use `loading="lazy"` so only visible thumbnails are decoded, reducing initial load time on large collections.
+
 ---
 
 ## Design System & Style Guide
@@ -635,20 +693,20 @@ Ultra-minimalist. The interface should be "almost invisible" — the user's imag
 
 Dark mode uses a dark grey palette (not pure black) for reduced eye strain and better contrast.
 
-| Usage             | Color        | Tailwind Class              |
-| ----------------- | ------------ | --------------------------- |
-| Background        | `#1a1a1a`    | `dark:bg-neutral-900`       |
-| Surface/Card      | `#262626`    | `dark:bg-neutral-800`       |
-| Elevated surface  | `#333333`    | `dark:bg-neutral-700`       |
-| Primary text      | `#f5f5f5`    | `dark:text-neutral-100`     |
-| Secondary text    | `#a3a3a3`    | `dark:text-neutral-400`     |
-| Muted text        | `#737373`    | `dark:text-neutral-500`     |
-| Borders           | `#404040`    | `dark:border-neutral-700`   |
-| Light borders     | `#333333`    | `dark:border-neutral-800`   |
-| Canvas default BG | `#262626`    | —                           |
-| Selection ring    | Blue 400/50% | `dark:ring-blue-400/50`     |
-| Danger hover      | Red 400      | `dark:hover:text-red-400`   |
-| Success feedback  | Green 400    | `dark:text-green-400`       |
+| Usage             | Color        | Tailwind Class            |
+| ----------------- | ------------ | ------------------------- |
+| Background        | `#1a1a1a`    | `dark:bg-neutral-900`     |
+| Surface/Card      | `#262626`    | `dark:bg-neutral-800`     |
+| Elevated surface  | `#333333`    | `dark:bg-neutral-700`     |
+| Primary text      | `#f5f5f5`    | `dark:text-neutral-100`   |
+| Secondary text    | `#a3a3a3`    | `dark:text-neutral-400`   |
+| Muted text        | `#737373`    | `dark:text-neutral-500`   |
+| Borders           | `#404040`    | `dark:border-neutral-700` |
+| Light borders     | `#333333`    | `dark:border-neutral-800` |
+| Canvas default BG | `#262626`    | —                         |
+| Selection ring    | Blue 400/50% | `dark:ring-blue-400/50`   |
+| Danger hover      | Red 400      | `dark:hover:text-red-400` |
+| Success feedback  | Green 400    | `dark:text-green-400`     |
 
 ### Dark Mode Implementation
 
@@ -664,38 +722,52 @@ Dark mode uses a dark grey palette (not pure black) for reduced eye strain and b
 const [isDark, setIsDark] = useState(false);
 
 useEffect(() => {
-  const stored = localStorage.getItem('theme');
-  const dark = stored === 'dark';
+  const stored = localStorage.getItem("theme");
+  const dark = stored === "dark";
   setIsDark(dark);
-  document.documentElement.classList.toggle('dark', dark);
+  document.documentElement.classList.toggle("dark", dark);
 }, []);
 
 const toggleTheme = () => {
   const next = !isDark;
   setIsDark(next);
-  localStorage.setItem('theme', next ? 'dark' : 'light');
-  document.documentElement.classList.toggle('dark', next);
+  localStorage.setItem("theme", next ? "dark" : "light");
+  document.documentElement.classList.toggle("dark", next);
 };
 
 // Toggle button (top-right of header)
 <button
   onClick={toggleTheme}
   className="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+  aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
 >
   {isDark ? (
     // Sun icon (show in dark mode → click to go light)
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
       <circle cx="12" cy="12" r="5" />
       <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
     </svg>
   ) : (
     // Moon icon (show in light mode → click to go dark)
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   )}
-</button>
+</button>;
 ```
 
 **CSS Variables** (in `globals.css`):
@@ -728,6 +800,7 @@ const toggleTheme = () => {
 ```
 
 **Key considerations**:
+
 - Canvas export should always use the selected canvas `bgColor`, regardless of app theme
 - Image thumbnails and previews need sufficient contrast on dark surfaces
 - Button outlines use `border-neutral-600` in dark mode for visibility
@@ -774,7 +847,21 @@ All icons are inline SVGs with `stroke="currentColor"`, `strokeWidth="1.5"`, no 
 
 ### State Management
 
-All state lives in `MoodboardGenerator` via `useState`. The `InteractiveCanvas` and `ImageLibrary` are controlled components. Cloud state is managed via `CloudProvider` context (`useCloud` hook). No external state library.
+Core UI state lives in `MoodboardGenerator` via `useState`. Domain logic is delegated to five extracted hooks (`useUndoRedo`, `useAutoSave`, `useCanvasExport`, `useCollectionManager`, `useImageManagement`) that receive state setters and context objects via `useMemo`-wrapped dependency bundles to maintain stable references. The `InteractiveCanvas` and `ImageLibrary` are controlled components. Cloud state is managed via `CloudProvider` context (`useCloud` hook). No external state library.
+
+### Hook Architecture
+
+`MoodboardGenerator` (~900 lines, down from ~1370) delegates domain logic to five hooks, each owning a distinct concern:
+
+| Hook                   | Responsibility                          | Key Exports                                                  |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| `useUndoRedo`          | History stacks + rehydration            | `commitSnapshot`, `undo`, `redo`                             |
+| `useAutoSave`          | 30s draft persistence + dirty detection | `draftIndicator`, `consumeDraft`, `clearCurrentDraft`        |
+| `useCanvasExport`      | Download, print, Farcaster cast         | `saveImage`, `castToFarcaster`, `downloadAuto`               |
+| `useCollectionManager` | Collection CRUD, search/sort/filter     | `savedArtworks`, `saveToCollection`, `loadArtworkForEditing` |
+| `useImageManagement`   | File input, previews, generate          | `files`, `handleFileChange`, `generate`, `enterManualMode`   |
+
+Hooks receive stable dependency objects built with `useMemo` (e.g., `collectionSetters`, `saveCtx`, `imageSetters`) to avoid unnecessary re-renders.
 
 ### Undo/Redo Memory Optimization
 
@@ -791,6 +878,10 @@ Logical coordinates (e.g., 1080×1527 for portrait A4). Display uses percentage-
 ### Error Handling
 
 Image loading, IndexedDB, and API calls use try/catch with `console.error`. UI remains functional on failure. Cloud sync errors show "Retry" status.
+
+### IndexedDB Error Recovery
+
+On startup, `isIndexedDBAvailable()` runs a probe test (open → delete a test database). If IndexedDB is unavailable (e.g., private browsing, quota exceeded), all CRUD operations silently fall back to an in-memory `Map`, and a warning banner is shown to the user: "Storage is unavailable — your work won't be saved between sessions."
 
 ---
 
@@ -821,6 +912,7 @@ Turso dialect, schema at `./src/lib/schema.ts`, Drizzle output at `./drizzle`. D
 The app is deployed to Vercel at `moodboard-generator-phi.vercel.app`.
 
 **Environment variables** must be set in the Vercel dashboard (not just `.env` files):
+
 - `TURSO_DATABASE_URL`
 - `TURSO_AUTH_TOKEN`
 - `PINATA_JWT`
@@ -843,11 +935,12 @@ Turso database: `moodboard-db`. Push schema changes with `npm run db:push`.
 
 ## Current Status
 
-All features are implemented and the project builds cleanly with no TypeScript errors. Only linter warnings remain — CSS inline style warnings on elements that require dynamic styling, which are expected.
+All features are implemented and the project builds cleanly with no TypeScript errors. Only linter warnings remain — CSS inline style warnings on elements that require dynamic styling, which are expected. The main component (`MoodboardGenerator`) has been decomposed into a hook-based architecture for maintainability.
 
 ### Fully Implemented
 
 **Core Features:**
+
 - Image upload with validation (4–20 images, JPEG/PNG/WebP/GIF)
 - Auto-generate collage with organic scatter algorithm
 - Interactive manual canvas (drag, resize, pin, delete, layer)
@@ -859,6 +952,7 @@ All features are implemented and the project builds cleanly with no TypeScript e
 - Add images directly in manual mode via file picker
 
 **Data & Organization:**
+
 - Save to collection with visual thumbnail previews
 - Collection grid view with search, category filter, sort
 - Delete confirmation dialog
@@ -866,35 +960,51 @@ All features are implemented and the project builds cleanly with no TypeScript e
 - Duplicate artwork
 - Moodboard categorization (10 defaults + custom)
 - Image library with search, tags, multi-select, deduplication
-- Auto-save draft (every 30s, recovery on app load)
+- Auto-save draft (every 30s, fingerprint-based dirty detection, recovery on app load)
 
 **Cloud & Sync:**
+
 - Farcaster Quick Auth (server-side JWT verification)
 - Cloud sync via Turso + Pinata IPFS
 - Incremental sync (only push modified artworks)
 - Parallel image uploads/downloads (max 3 concurrent)
 - Client-side image compression before IPFS upload
 - Auto-sync on login
+- Offline sync queue with auto-drain on reconnect
+- Queued sync to prevent race conditions
 
 **Export & Sharing:**
+
 - Download PNG / Save to Camera Roll (Web Share API on mobile)
 - Print with dedicated print layout
 - Cast to Farcaster with IPFS image embed
 - Step-by-step cast status feedback
 
 **Security:**
+
 - Origin validation on all API routes
-- Rate limiting on public endpoints (10 req/min per IP)
+- Rate limiting on public endpoints (10 req/min per IP, periodic memory cleanup)
 - Secrets in `.env.local` only (gitignored)
 - Input validation and sanitization on all API routes
 - Ownership verification on sync (fid from JWT)
 
 **Farcaster Integration:**
+
 - Mini App SDK (`sdk.actions.ready()`, `composeCast()`)
 - `fc:miniapp` metadata + `farcaster.json` manifest
 - User context detection (FID, username, PFP)
 - Quick Auth for authenticated API calls
 - Auth preconnect for faster load
+
+**Performance & Resilience:**
+
+- IndexedDB error recovery with in-memory fallback + user warning banner
+- Object URL cache for memory-efficient canvas rendering
+- OffscreenCanvas Web Worker for non-blocking exports and thumbnails
+- Lazy-loaded collection thumbnails (`loading="lazy"`)
+- Fingerprint-based auto-save (skips saves when state unchanged)
+- Rate limiter periodic cleanup (prevents server memory leaks)
+- Hook-based component architecture (MoodboardGenerator decomposed into 5 hooks)
 
 ### Not Yet Implemented
 
@@ -903,7 +1013,6 @@ All features are implemented and the project builds cleanly with no TypeScript e
 - Multi-select / batch operations on canvas
 - Canvas zoom/pan for detailed work
 - Client-side encryption for private moodboards
-- Offline queue for sync (changes are lost if sync fails offline)
 - Data export (JSON + images ZIP)
 - PWA / service worker for offline use
 - Collaborative moodboards
