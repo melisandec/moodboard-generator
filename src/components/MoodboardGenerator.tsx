@@ -1,17 +1,12 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { sdk } from '@farcaster/miniapp-sdk';
+import { extractColors } from '@/lib/canvas';
 import {
-  loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
-  renderManualMoodboard, renderMoodboardToBlob, extractColors, renderThumbnail,
-} from '@/lib/canvas';
-import { renderMoodboardToBlobOffscreen, renderThumbnailOffscreen } from '@/lib/canvas-offscreen';
-import {
-  saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
-  saveDraft, loadDraft, clearDraft, ensureInLibrary, DEFAULT_CATEGORIES,
-  stripDataUrls, rehydrateImages, isIndexedDBAvailable,
-  type Artwork, type CanvasImage, type LightCanvasImage, type Orientation, type Template, type Draft, type LibraryImage,
+  saveTemplate, loadTemplates, deleteTemplate,
+  DEFAULT_CATEGORIES, isIndexedDBAvailable,
+  type CanvasImage, type Orientation, type Template,
 } from '@/lib/storage';
 import {
   CANVAS_DIMS, BUILT_IN_TEMPLATES, applyTemplate, artworkToTemplate,
@@ -20,11 +15,14 @@ import {
 import InteractiveCanvas from './InteractiveCanvas';
 import ImageLibrary from './ImageLibrary';
 import { useCloud } from './CloudProvider';
+import { useUndoRedo } from './hooks/useUndoRedo';
+import { useAutoSave } from './hooks/useAutoSave';
+import { useCanvasExport } from './hooks/useCanvasExport';
+import { useCollectionManager } from './hooks/useCollectionManager';
+import { useImageManagement } from './hooks/useImageManagement';
 
 const MIN_IMAGES = 4;
 const MAX_IMAGES = 20;
-const MAX_HISTORY = 50;
-const AUTOSAVE_MS = 30_000;
 const BG_PRESETS = ['#FFFFFF', '#F8F8F8', '#F0F0F0', '#FAF9F6', '#000000'];
 
 type View = 'create' | 'auto-result' | 'manual' | 'library';
@@ -127,8 +125,6 @@ function ActionBar({ onDownload, onPrint, onCast, castStatus }: { onDownload: ()
 // ---------------------------------------------------------------------------
 
 export default function MoodboardGenerator() {
-  const [files, setFiles] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
   const [view, setView] = useState<View>('create');
@@ -140,7 +136,6 @@ export default function MoodboardGenerator() {
   // Manual-mode
   const [canvasImages, setCanvasImages] = useState<CanvasImage[]>([]);
   const [artworkId, setArtworkId] = useState<string | null>(null);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [orientation, setOrientationState] = useState<Orientation>('portrait');
   const [bgColor, setBgColor] = useState('#f5f5f4');
   const [imageMargin, setImageMargin] = useState(false);
@@ -152,11 +147,6 @@ export default function MoodboardGenerator() {
   const [showCatRow, setShowCatRow] = useState(false);
   const [newCatDraft, setNewCatDraft] = useState('');
 
-  // Undo / Redo — lightweight stacks store metadata only; image blobs live in the ref
-  const [undoStack, setUndoStack] = useState<LightCanvasImage[][]>([]);
-  const [redoStack, setRedoStack] = useState<LightCanvasImage[][]>([]);
-  const imageStoreRef = useRef<Map<string, string>>(new Map());
-
   // UI panels
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -164,36 +154,70 @@ export default function MoodboardGenerator() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [extractedColors, setExtractedColors] = useState<string[]>([]);
 
-  // Auto-save draft
-  const [draftIndicator, setDraftIndicator] = useState<string | null>(null);
-  const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
-
-  // Cast state
-  const [castStatus, setCastStatus] = useState<string | null>(null);
-
-  // Collection
-  const [savedArtworks, setSavedArtworks] = useState<Artwork[]>([]);
-  const [userTemplates, setUserTemplates] = useState<Template[]>([]);
-  const [colSearch, setColSearch] = useState('');
-  const [colSort, setColSort] = useState<ColSort>('newest');
-  const [colCatFilter, setColCatFilter] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const manualFileRef = useRef<HTMLInputElement>(null);
-  const { user: cloudUser, syncStatus, signIn: cloudSignIn, sync: cloudSync } = useCloud();
-  const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
-  const dims = CANVAS_DIMS[orientation];
-
   // Storage availability
   const [storageAvailable, setStorageAvailable] = useState(true);
 
-  // Dark mode
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark');
-    }
-    return false;
-  });
+  const { user: cloudUser, syncStatus, signIn: cloudSignIn, sync: cloudSync } = useCloud();
+  const dims = CANVAS_DIMS[orientation];
+
+  // ---- Extracted hooks ----
+
+  const { undoStack, redoStack, commitSnapshot, undo, redo, clearHistory } =
+    useUndoRedo(canvasImages, setCanvasImages);
+
+  const { draftIndicator, pendingDraft, dismissDraft, consumeDraft } =
+    useAutoSave({ view, title, caption, canvasImages, orientation, bgColor, imageMargin, categories });
+
+  const { castStatus, downloadAuto, printAuto, downloadManual, printManual, castToFarcaster } =
+    useCanvasExport({ title, caption, view, canvasImages, dimsW: dims.w, dimsH: dims.h, bgColor, imageMargin, moodboardUrl });
+
+  const collectionSetters = useMemo(() => ({
+    setTitle, setCaption, setCanvasImages, setProcessedData, setArtworkId,
+    setOrientationState, setBgColor, setImageMargin, setCategories, setView,
+    clearHistory, setExtractedColors,
+  }), [clearHistory]);
+
+  const saveCtx = useMemo(() => ({
+    artworkId, title, caption, canvasImages, dimsW: dims.w, dimsH: dims.h,
+    orientation, bgColor, imageMargin, categories,
+  }), [artworkId, title, caption, canvasImages, dims.w, dims.h, orientation, bgColor, imageMargin, categories]);
+
+  const {
+    savedArtworks, saveMsg, colSearch, setColSearch, colSort, setColSort,
+    colCatFilter, setColCatFilter, deleteConfirmId, setDeleteConfirmId,
+    collectionCategories, filteredArtworks, refreshCollection,
+    saveToCollection, confirmDeleteArtwork, handleDeleteArtwork,
+    togglePinArtwork, loadArtworkForEditing, duplicateArtwork,
+  } = useCollectionManager(
+    { syncStatus, cloudUser, cloudSync },
+    collectionSetters,
+    saveCtx,
+  );
+
+  const imageSetters = useMemo(() => ({
+    setCanvasImages, setProcessedData, setArtworkId, setView, setBgColor,
+    setImageMargin, setCategories, setExtractedColors, setMoodboardUrl,
+    setIsProcessing, clearHistory, commitSnapshot,
+  }), [clearHistory, commitSnapshot]);
+
+  const {
+    files, previewUrls, fileInputRef, manualFileRef, canGenerate,
+    handleFileChange, removeImage, generate, regenerate,
+    enterManualMode, addFromLibrary, handleManualFileAdd,
+  } = useImageManagement(
+    { canvasImages, orientation, view, isProcessing, title, caption, dims },
+    imageSetters,
+  );
+
+  // Templates
+  const [userTemplates, setUserTemplates] = useState<Template[]>([]);
+
+  // Dark mode — initialise after mount to avoid SSR hydration mismatch
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setIsDark((prev) => {
@@ -216,14 +240,7 @@ export default function MoodboardGenerator() {
   useEffect(() => {
     sdk.actions.ready({ disableNativeGestures: true }).catch(() => {});
     isIndexedDBAvailable().then((ok) => setStorageAvailable(ok)).catch(() => setStorageAvailable(false));
-    loadArtworks()
-      .then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
-      .catch(() => {});
     loadTemplates().then(setUserTemplates).catch(() => {});
-
-    loadDraft().then((d) => {
-      if (d) setPendingDraft(d);
-    }).catch(() => {});
 
     const stored = localStorage.getItem('moodboard-custom-categories');
     if (stored) {
@@ -251,48 +268,6 @@ export default function MoodboardGenerator() {
   });
 
   // -----------------------------------------------------------------------
-  // Auto-save draft (every 30s in manual view, only when state changed)
-  // -----------------------------------------------------------------------
-
-  const lastSavedDraftHash = useRef<string>('');
-
-  useEffect(() => {
-    if (view !== 'manual' || canvasImages.length === 0) return;
-    const timer = setInterval(() => {
-      // Build a lightweight fingerprint of the current state to detect changes
-      const hash = JSON.stringify([
-        title.trim(),
-        caption.trim(),
-        canvasImages.map((img) => [img.id, img.x, img.y, img.width, img.height, img.rotation, img.zIndex, img.pinned]),
-        orientation,
-        bgColor,
-        imageMargin,
-        categories,
-      ]);
-
-      if (hash === lastSavedDraftHash.current) return; // nothing changed
-
-      const draft: Draft = {
-        id: 'current',
-        title: title.trim(),
-        caption: caption.trim(),
-        images: canvasImages,
-        orientation,
-        bgColor,
-        imageMargin,
-        categories,
-        savedAt: new Date().toISOString(),
-      };
-      saveDraft(draft).then(() => {
-        lastSavedDraftHash.current = hash;
-        setDraftIndicator('Draft saved');
-        setTimeout(() => setDraftIndicator(null), 1500);
-      }).catch(() => {});
-    }, AUTOSAVE_MS);
-    return () => clearInterval(timer);
-  }, [view, title, caption, canvasImages, orientation, bgColor, imageMargin, categories]);
-
-  // -----------------------------------------------------------------------
   // Draft recovery
   // -----------------------------------------------------------------------
 
@@ -307,59 +282,10 @@ export default function MoodboardGenerator() {
     setImageMargin(pendingDraft.imageMargin ?? false);
     setCategories(pendingDraft.categories ?? []);
     setArtworkId(null);
-    setUndoStack([]);
-    setRedoStack([]);
+    clearHistory();
     setView('manual');
-    setPendingDraft(null);
-  }, [pendingDraft]);
-
-  const dismissDraft = useCallback(() => {
-    clearDraft().catch(() => {});
-    setPendingDraft(null);
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // Image store — keeps dataUrl blobs keyed by image id, so undo/redo
-  // stacks only hold lightweight metadata (~100 bytes per image vs ~200 KB).
-  // -----------------------------------------------------------------------
-
-  const syncImageStore = useCallback((imgs: CanvasImage[]) => {
-    const store = imageStoreRef.current;
-    for (const img of imgs) {
-      if (!store.has(img.id)) store.set(img.id, img.dataUrl);
-    }
-  }, []);
-
-  useEffect(() => { syncImageStore(canvasImages); }, [canvasImages, syncImageStore]);
-
-  // -----------------------------------------------------------------------
-  // Undo / Redo
-  // -----------------------------------------------------------------------
-
-  const commitSnapshot = useCallback(() => {
-    setUndoStack((prev) => [...prev.slice(-(MAX_HISTORY - 1)), stripDataUrls(canvasImages)]);
-    setRedoStack([]);
-  }, [canvasImages]);
-
-  const undo = useCallback(() => {
-    setUndoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const snapshot = prev[prev.length - 1];
-      setRedoStack((r) => [...r, stripDataUrls(canvasImages)]);
-      setCanvasImages(rehydrateImages(snapshot, imageStoreRef.current));
-      return prev.slice(0, -1);
-    });
-  }, [canvasImages]);
-
-  const redo = useCallback(() => {
-    setRedoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const snapshot = prev[prev.length - 1];
-      setUndoStack((u) => [...u, stripDataUrls(canvasImages)]);
-      setCanvasImages(rehydrateImages(snapshot, imageStoreRef.current));
-      return prev.slice(0, -1);
-    });
-  }, [canvasImages]);
+    consumeDraft();
+  }, [pendingDraft, clearHistory, consumeDraft]);
 
   // -----------------------------------------------------------------------
   // Category management
@@ -380,189 +306,6 @@ export default function MoodboardGenerator() {
   }, [newCatDraft, allCategories]);
 
   // -----------------------------------------------------------------------
-  // File handling
-  // -----------------------------------------------------------------------
-
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const input = e.target.files;
-      if (!input) return;
-      const toAdd = Array.from(input).slice(0, MAX_IMAGES - files.length);
-      if (toAdd.length === 0) return;
-      setFiles((p) => [...p, ...toAdd]);
-      setPreviewUrls((p) => [...p, ...toAdd.map((f) => URL.createObjectURL(f))]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    },
-    [files.length],
-  );
-
-  const removeImage = useCallback((index: number) => {
-    setPreviewUrls((p) => { URL.revokeObjectURL(p[index]); return p.filter((_, i) => i !== index); });
-    setFiles((p) => p.filter((_, i) => i !== index));
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // Auto-generate
-  // -----------------------------------------------------------------------
-
-  const generate = useCallback(async () => {
-    if (!canGenerate || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const loaded = await Promise.all(files.map((f) => loadImage(f)));
-      setMoodboardUrl(renderMoodboard(loaded, title.trim(), caption.trim()));
-      setView('auto-result');
-    } catch (err) { console.error(err); }
-    finally { setIsProcessing(false); }
-  }, [canGenerate, isProcessing, files, title, caption]);
-
-  const regenerate = useCallback(async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const loaded = await Promise.all(files.map((f) => loadImage(f)));
-      setMoodboardUrl(renderMoodboard(loaded, title.trim(), caption.trim()));
-    } catch (err) { console.error(err); }
-    finally { setIsProcessing(false); }
-  }, [isProcessing, files, title, caption]);
-
-  // -----------------------------------------------------------------------
-  // Enter manual mode
-  // -----------------------------------------------------------------------
-
-  const enterManualMode = useCallback(async () => {
-    if (!canGenerate || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const processed = await Promise.all(files.map((f) => compressForStorage(f)));
-      setProcessedData(processed);
-      const d = CANVAS_DIMS[orientation];
-      setCanvasImages(createInitialPlacements(processed, d.w, d.h));
-      setArtworkId(null);
-      setBgColor('#f5f5f4');
-      setImageMargin(false);
-      setCategories([]);
-      setUndoStack([]);
-      setRedoStack([]);
-      setExtractedColors([]);
-      clearDraft().catch(() => {});
-      setView('manual');
-
-      // add images to library in background
-      for (let i = 0; i < processed.length; i++) {
-        ensureInLibrary(processed[i].dataUrl, files[i].name, processed[i].naturalWidth, processed[i].naturalHeight).catch(() => {});
-      }
-    } catch (err) { console.error(err); }
-    finally { setIsProcessing(false); }
-  }, [canGenerate, isProcessing, files, orientation]);
-
-  const loadArtworkForEditing = useCallback((aw: Artwork) => {
-    setTitle(aw.title);
-    setCaption(aw.caption);
-    setCanvasImages(aw.images);
-    setProcessedData(aw.images.map((i) => ({ dataUrl: i.dataUrl, naturalWidth: i.naturalWidth, naturalHeight: i.naturalHeight })));
-    setArtworkId(aw.id);
-    setOrientationState(aw.orientation ?? 'portrait');
-    setBgColor(aw.bgColor ?? '#f5f5f4');
-    setImageMargin(aw.imageMargin ?? false);
-    setCategories(aw.categories ?? []);
-    setUndoStack([]);
-    setRedoStack([]);
-    setExtractedColors([]);
-    setView('manual');
-  }, []);
-
-  const duplicateArtwork = useCallback((aw: Artwork) => {
-    setTitle(`Copy of ${aw.title}`);
-    setCaption(aw.caption);
-    setCanvasImages(aw.images.map((i) => ({ ...i, id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` })));
-    setProcessedData(aw.images.map((i) => ({ dataUrl: i.dataUrl, naturalWidth: i.naturalWidth, naturalHeight: i.naturalHeight })));
-    setArtworkId(null);
-    setOrientationState(aw.orientation ?? 'portrait');
-    setBgColor(aw.bgColor ?? '#f5f5f4');
-    setImageMargin(aw.imageMargin ?? false);
-    setCategories(aw.categories ?? []);
-    setUndoStack([]);
-    setRedoStack([]);
-    setView('manual');
-  }, []);
-
-  // -----------------------------------------------------------------------
-  // Add images from library to current canvas
-  // -----------------------------------------------------------------------
-
-  const addFromLibrary = useCallback((libImages: LibraryImage[]) => {
-    const maxZ = canvasImages.length > 0 ? Math.max(...canvasImages.map((i) => i.zIndex)) + 1 : 0;
-    const newImgs: CanvasImage[] = libImages.map((li, idx) => {
-      const aspect = li.naturalWidth / li.naturalHeight;
-      const w = dims.w * 0.3;
-      const h = w / aspect;
-      return {
-        id: `img-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
-        dataUrl: li.dataUrl,
-        x: dims.w * 0.1 + Math.random() * dims.w * 0.5,
-        y: dims.h * 0.1 + Math.random() * dims.h * 0.5,
-        width: w,
-        height: h,
-        rotation: 0,
-        pinned: false,
-        zIndex: maxZ + idx,
-        naturalWidth: li.naturalWidth,
-        naturalHeight: li.naturalHeight,
-      };
-    });
-
-    if (view === 'manual' && canvasImages.length > 0) {
-      commitSnapshot();
-      setCanvasImages((prev) => [...prev, ...newImgs]);
-      setProcessedData((prev) => [...prev, ...libImages.map((li) => ({ dataUrl: li.dataUrl, naturalWidth: li.naturalWidth, naturalHeight: li.naturalHeight }))]);
-    } else {
-      setCanvasImages(newImgs);
-      setProcessedData(libImages.map((li) => ({ dataUrl: li.dataUrl, naturalWidth: li.naturalWidth, naturalHeight: li.naturalHeight })));
-      setArtworkId(null);
-      setUndoStack([]);
-      setRedoStack([]);
-    }
-    setView('manual');
-  }, [view, canvasImages, dims, commitSnapshot]);
-
-  // Add images directly to canvas from file picker (manual mode)
-  const handleManualFileAdd = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target.files;
-    if (!input || input.length === 0) return;
-    const newFiles = Array.from(input).slice(0, MAX_IMAGES - canvasImages.length);
-    if (newFiles.length === 0) return;
-
-    const processed = await Promise.all(newFiles.map((f) => compressForStorage(f)));
-    const maxZ = canvasImages.length > 0 ? Math.max(...canvasImages.map((i) => i.zIndex)) + 1 : 0;
-
-    const newImgs: CanvasImage[] = processed.map((p, idx) => {
-      const aspect = p.naturalWidth / p.naturalHeight;
-      const w = dims.w * 0.3;
-      const h = w / aspect;
-      return {
-        id: `img-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
-        dataUrl: p.dataUrl,
-        x: dims.w * 0.1 + Math.random() * dims.w * 0.5,
-        y: dims.h * 0.1 + Math.random() * dims.h * 0.5,
-        width: w, height: h, rotation: 0, pinned: false,
-        zIndex: maxZ + idx,
-        naturalWidth: p.naturalWidth, naturalHeight: p.naturalHeight,
-      };
-    });
-
-    commitSnapshot();
-    setCanvasImages((prev) => [...prev, ...newImgs]);
-    setProcessedData((prev) => [...prev, ...processed]);
-
-    for (let i = 0; i < processed.length; i++) {
-      ensureInLibrary(processed[i].dataUrl, newFiles[i].name, processed[i].naturalWidth, processed[i].naturalHeight).catch(() => {});
-    }
-
-    if (manualFileRef.current) manualFileRef.current.value = '';
-  }, [canvasImages, dims, commitSnapshot]);
-
-  // -----------------------------------------------------------------------
   // Orientation switch
   // -----------------------------------------------------------------------
 
@@ -574,68 +317,6 @@ export default function MoodboardGenerator() {
     setCanvasImages((prev) => rescaleImages(prev, oldD.w, oldD.h, newD.w, newD.h));
     setOrientationState(newOr);
   }, [orientation, commitSnapshot]);
-
-  // -----------------------------------------------------------------------
-  // Save to collection
-  // -----------------------------------------------------------------------
-
-  const refreshCollection = useCallback(() => {
-    loadArtworks().then((l) => setSavedArtworks(l.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (syncStatus === 'synced') refreshCollection();
-  }, [syncStatus, refreshCollection]);
-
-  const saveToCollection = useCallback(async () => {
-    const now = new Date().toISOString();
-    const id = artworkId ?? `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    let createdAt = now;
-    if (artworkId) {
-      const ex = savedArtworks.find((a) => a.id === artworkId);
-      if (ex) createdAt = ex.createdAt;
-    }
-
-    let thumbnail: string | undefined;
-    try {
-      thumbnail = await renderThumbnailOffscreen(
-        canvasImages, dims.w, dims.h, bgColor, imageMargin,
-        () => renderThumbnail(canvasImages, dims.w, dims.h, bgColor, imageMargin),
-      );
-    } catch { /* non-critical */ }
-
-    await saveArtwork({
-      id, title: title.trim() || 'Untitled', caption: caption.trim(),
-      images: canvasImages, canvasWidth: dims.w, canvasHeight: dims.h,
-      orientation, bgColor, imageMargin, categories, thumbnail,
-      pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
-      createdAt, updatedAt: now,
-    });
-    setArtworkId(id);
-    setSaveMsg('Saved');
-    setTimeout(() => setSaveMsg(null), 1500);
-    refreshCollection();
-    clearDraft().catch(() => {});
-    if (cloudUser) cloudSync().then(() => refreshCollection()).catch(() => {});
-  }, [artworkId, savedArtworks, title, caption, canvasImages, dims, orientation, bgColor, imageMargin, categories, refreshCollection, cloudUser, cloudSync]);
-
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  const confirmDeleteArtwork = useCallback((id: string) => {
-    setDeleteConfirmId(id);
-  }, []);
-
-  const handleDeleteArtwork = useCallback(async (id: string) => {
-    await deleteArtwork(id);
-    setSavedArtworks((p) => p.filter((a) => a.id !== id));
-    setDeleteConfirmId(null);
-  }, []);
-
-  const togglePinArtwork = useCallback(async (aw: Artwork) => {
-    const updated = { ...aw, pinned: !aw.pinned, updatedAt: aw.updatedAt };
-    await saveArtwork(updated);
-    refreshCollection();
-  }, [refreshCollection]);
 
   // -----------------------------------------------------------------------
   // Templates
@@ -675,160 +356,8 @@ export default function MoodboardGenerator() {
   }, [canvasImages]);
 
   // -----------------------------------------------------------------------
-  // Export helpers
+  // Collection filtering & sorting (now in useCollectionManager)
   // -----------------------------------------------------------------------
-
-  const saveImage = useCallback(async (dataUrl: string) => {
-    const filename = `${title.trim().replace(/\s+/g, '-').toLowerCase() || 'moodboard'}.png`;
-
-    try {
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const file = new File([blob], filename, { type: 'image/png' });
-
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file] });
-        return;
-      }
-    } catch {
-      // share cancelled or unsupported — fall through to download
-    }
-
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [title]);
-
-  const printUrl = useCallback((url: string) => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>${title || 'Moodboard'}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff}img{max-width:100%;max-height:100vh;object-fit:contain}@media print{body{min-height:auto}img{max-height:none;width:100%}}</style></head><body><img src="${url}"/><script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script></body></html>`,
-    );
-    w.document.close();
-  }, [title]);
-
-  const castToFarcaster = useCallback(async () => {
-    let text = title.trim();
-    if (caption.trim()) text += `\n\n${caption.trim()}`;
-
-    setCastStatus('Rendering image…');
-    let imageUrl: string | undefined;
-
-    try {
-      let blob: Blob | null = null;
-
-      if (view === 'manual' && canvasImages.length > 0) {
-        blob = await renderMoodboardToBlobOffscreen(
-          canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin, 0.85,
-          () => renderMoodboardToBlob(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin),
-        );
-      } else if (moodboardUrl) {
-        const res = await fetch(moodboardUrl);
-        blob = await res.blob();
-      }
-
-      if (blob) {
-        setCastStatus('Uploading image…');
-        const formData = new FormData();
-        formData.append('file', blob, 'moodboard.jpg');
-
-        const uploadRes = await fetch('/api/cast-image', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (uploadRes.ok) {
-          const json = await uploadRes.json();
-          imageUrl = json.url;
-        } else {
-          const errBody = await uploadRes.text().catch(() => '');
-          console.error('Cast image upload response:', uploadRes.status, errBody);
-        }
-      }
-    } catch (err) {
-      console.error('Cast image upload failed:', err);
-    }
-
-    if (!imageUrl) {
-      setCastStatus('Image upload failed — casting without image');
-      await new Promise((r) => setTimeout(r, 1200));
-    } else {
-      setCastStatus('Opening cast composer…');
-    }
-
-    try {
-      await sdk.actions.composeCast({
-        text,
-        embeds: imageUrl ? [imageUrl] : [],
-      });
-    } catch {
-      const params = new URLSearchParams({ text });
-      if (imageUrl) params.append('embeds[]', imageUrl);
-      window.open(`https://warpcast.com/~/compose?${params.toString()}`, '_blank');
-    }
-
-    setCastStatus(null);
-    clearDraft().catch(() => {});
-  }, [title, caption, view, canvasImages, dims, bgColor, imageMargin, moodboardUrl]);
-
-  const downloadAuto = useCallback(() => { if (moodboardUrl) saveImage(moodboardUrl); }, [moodboardUrl, saveImage]);
-  const printAuto = useCallback(() => { if (moodboardUrl) printUrl(moodboardUrl); }, [moodboardUrl, printUrl]);
-
-  const downloadManual = useCallback(async () => {
-    const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
-    saveImage(url);
-    clearDraft().catch(() => {});
-  }, [canvasImages, title, caption, dims, bgColor, imageMargin, saveImage]);
-
-  const printManual = useCallback(async () => {
-    const url = await renderManualMoodboard(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
-    printUrl(url);
-  }, [canvasImages, title, caption, dims, bgColor, imageMargin, printUrl]);
-
-  // -----------------------------------------------------------------------
-  // Collection filtering & sorting
-  // -----------------------------------------------------------------------
-
-  const collectionCategories = useMemo(() => {
-    const s = new Set<string>();
-    savedArtworks.forEach((a) => (a.categories ?? []).forEach((c) => s.add(c)));
-    return [...s].sort();
-  }, [savedArtworks]);
-
-  const filteredArtworks = useMemo(() => {
-    let list = [...savedArtworks];
-
-    if (colSearch) {
-      const q = colSearch.toLowerCase();
-      list = list.filter((a) =>
-        a.title.toLowerCase().includes(q) ||
-        a.caption.toLowerCase().includes(q) ||
-        (a.categories ?? []).some((c) => c.toLowerCase().includes(q)),
-      );
-    }
-
-    if (colCatFilter) {
-      list = list.filter((a) => (a.categories ?? []).includes(colCatFilter));
-    }
-
-    const pinned = list.filter((a) => a.pinned);
-    const unpinned = list.filter((a) => !a.pinned);
-
-    const sortFn = (arr: Artwork[]) => {
-      switch (colSort) {
-        case 'newest': return arr.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        case 'oldest': return arr.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
-        case 'title': return arr.sort((a, b) => a.title.localeCompare(b.title));
-        case 'images': return arr.sort((a, b) => b.images.length - a.images.length);
-      }
-    };
-
-    return [...sortFn(pinned), ...sortFn(unpinned)];
-  }, [savedArtworks, colSearch, colSort, colCatFilter]);
 
   // =====================================================================
   // LIBRARY VIEW
