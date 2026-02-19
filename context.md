@@ -6,77 +6,45 @@ A Farcaster mini-app for creating, composing, and sharing moodboard collages. Us
 
 ## Table of Contents
 
-- [Moodboard Generator — Project Context](#moodboard-generator--project-context)
-  - [Table of Contents](#table-of-contents)
-  - [Tech Stack](#tech-stack)
-  - [Project Structure](#project-structure)
-    - [File Responsibilities](#file-responsibilities)
-  - [Application Flow](#application-flow)
-  - [Feature Reference](#feature-reference)
-    - [Image Upload \& Validation](#image-upload--validation)
-    - [Auto-Generate Mode](#auto-generate-mode)
-    - [Interactive Manual Mode](#interactive-manual-mode)
-    - [Canvas Orientation](#canvas-orientation)
-    - [Undo / Redo History](#undo--redo-history)
-    - [Background Color Picker](#background-color-picker)
-    - [Color Extraction](#color-extraction)
-    - [Image Margin Control](#image-margin-control)
-    - [Templates](#templates)
-    - [Save to Collection](#save-to-collection)
-    - [Duplicate Artwork](#duplicate-artwork)
-    - [Export: Download, Print, Cast](#export-download-print-cast)
-    - [Farcaster Integration](#farcaster-integration)
-  - [Data Model](#data-model)
-    - [CanvasImage](#canvasimage)
-    - [Artwork](#artwork)
-    - [Template](#template)
-  - [Storage Architecture](#storage-architecture)
-  - [Canvas Rendering Pipeline](#canvas-rendering-pipeline)
-    - [Auto-Generate Mode](#auto-generate-mode-1)
-    - [Manual Mode (Export)](#manual-mode-export)
-    - [Image Compression (for storage)](#image-compression-for-storage)
-  - [Design System \& Style Guide](#design-system--style-guide)
-    - [Philosophy](#philosophy)
-    - [Colors](#colors)
-    - [Typography](#typography)
-    - [Spacing \& Layout](#spacing--layout)
-    - [Interactive Elements](#interactive-elements)
-    - [Icons](#icons)
-  - [Mobile \& Touch Optimization](#mobile--touch-optimization)
-  - [Conventions \& Patterns](#conventions--patterns)
-    - [State Management](#state-management)
-    - [Callbacks](#callbacks)
-    - [Component Communication](#component-communication)
-    - [ID Generation](#id-generation)
-    - [Coordinate System](#coordinate-system)
-    - [Inline Styles](#inline-styles)
-    - [Error Handling](#error-handling)
-  - [Configuration Files](#configuration-files)
-    - [`next.config.ts`](#nextconfigts)
-    - [`tsconfig.json`](#tsconfigjson)
-    - [`postcss.config.mjs`](#postcssconfigmjs)
-    - [`globals.css`](#globalscss)
-  - [Deployment Considerations](#deployment-considerations)
-  - [Current Status](#current-status)
-    - [Fully Implemented](#fully-implemented)
-    - [Not Yet Implemented](#not-yet-implemented)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Application Flow](#application-flow)
+- [Feature Reference](#feature-reference)
+- [Data Model](#data-model)
+- [Storage Architecture](#storage-architecture)
+- [Cloud Infrastructure](#cloud-infrastructure)
+- [API Routes](#api-routes)
+- [Authentication & Security](#authentication--security)
+- [Canvas Rendering Pipeline](#canvas-rendering-pipeline)
+- [Design System & Style Guide](#design-system--style-guide)
+- [Mobile & Touch Optimization](#mobile--touch-optimization)
+- [Conventions & Patterns](#conventions--patterns)
+- [Configuration & Environment](#configuration--environment)
+- [Deployment](#deployment)
+- [Current Status](#current-status)
 
 ---
 
 ## Tech Stack
 
-| Layer      | Technology                          | Version |
-| ---------- | ----------------------------------- | ------- |
-| Framework  | Next.js (App Router, Turbopack)     | 16.1.6  |
-| UI Library | React                               | 19.2.3  |
-| Language   | TypeScript (strict mode)            | ^5      |
-| Styling    | Tailwind CSS v4 (via PostCSS)       | ^4      |
-| Font       | Geist Sans (Google Fonts, variable) | —       |
-| Compiler   | React Compiler (babel plugin)       | 1.0.0   |
-| Storage    | IndexedDB (client-side)             | —       |
-| Canvas     | HTML5 Canvas API                    | —       |
+| Layer          | Technology                          | Version |
+| -------------- | ----------------------------------- | ------- |
+| Framework      | Next.js (App Router, Turbopack)     | 16.1.6  |
+| UI Library     | React                               | 19.2.3  |
+| Language       | TypeScript (strict mode)            | ^5      |
+| Styling        | Tailwind CSS v4 (via PostCSS)       | ^4      |
+| Font           | Geist Sans (Google Fonts, variable) | —       |
+| Compiler       | React Compiler (babel plugin)       | 1.0.0   |
+| Local Storage  | IndexedDB (client-side)             | —       |
+| Cloud Database | Turso (libSQL / SQLite)             | —       |
+| ORM            | Drizzle ORM                         | ^0.45   |
+| Image Storage  | Pinata IPFS                         | —       |
+| Auth           | Farcaster Quick Auth (JWT)          | ^0.0.8  |
+| Farcaster SDK  | @farcaster/miniapp-sdk              | ^0.2.3  |
+| Canvas         | HTML5 Canvas API                    | —       |
+| Hosting        | Vercel (serverless functions)        | —       |
 
-Zero runtime dependencies beyond React and Next.js. No component library, no state management library, no image processing library — everything is hand-rolled to keep the bundle minimal.
+Minimal runtime dependencies. No component library, no state management library, no image processing library — canvas rendering, compression, and color extraction are hand-rolled.
 
 ---
 
@@ -85,77 +53,127 @@ Zero runtime dependencies beyond React and Next.js. No component library, no sta
 ```
 moodboard-generator/
 ├── public/
-│   └── .well-known/
-│       └── farcaster.json          # Farcaster Frame v2 manifest
+│   ├── .well-known/
+│   │   └── farcaster.json          # Farcaster mini-app manifest
+│   ├── icon.png                    # App icon / splash image
+│   ├── og.png                      # Open Graph image
+│   └── hero.png                    # Hero image
 ├── src/
 │   ├── app/
+│   │   ├── api/
+│   │   │   ├── cast-image/
+│   │   │   │   └── route.ts        # Upload moodboard image to IPFS for casting
+│   │   │   ├── images/
+│   │   │   │   └── upload/
+│   │   │   │       └── route.ts    # Upload library images to IPFS
+│   │   │   ├── sync/
+│   │   │   │   └── route.ts        # Push/pull moodboards to/from cloud
+│   │   │   └── user/
+│   │   │       └── route.ts        # User registration/update
 │   │   ├── globals.css             # Global styles, CSS variables, utilities
-│   │   ├── layout.tsx              # Root layout, viewport meta, OG + Frame metadata
+│   │   ├── layout.tsx              # Root layout, viewport meta, Farcaster metadata, CloudProvider
 │   │   └── page.tsx                # Renders <MoodboardGenerator />
 │   ├── components/
 │   │   ├── MoodboardGenerator.tsx  # Main app component (views, state, all features)
-│   │   └── InteractiveCanvas.tsx   # Drag/resize/pin canvas for manual mode
+│   │   ├── InteractiveCanvas.tsx   # Drag/resize/pin canvas for manual mode
+│   │   ├── ImageLibrary.tsx        # Image library view (search, tags, multi-select)
+│   │   └── CloudProvider.tsx       # Cloud auth context, sync orchestration
 │   └── lib/
-│       ├── storage.ts              # IndexedDB wrapper, TypeScript interfaces
-│       ├── canvas.ts               # Image loading, rendering, compression, color extraction
+│       ├── auth.ts                 # Server-side JWT verification, rate limiting, origin validation
+│       ├── canvas.ts               # Image loading, rendering, compression, thumbnails, color extraction
+│       ├── cloud.ts                # Cloud sync logic (push/pull, image upload, parallel operations)
+│       ├── db.ts                   # Turso database client (Drizzle + libSQL)
+│       ├── schema.ts              # Drizzle ORM schema (users, moodboards, images tables)
+│       ├── storage.ts              # IndexedDB wrapper, TypeScript interfaces, image hashing
 │       └── templates.ts            # Built-in templates, apply/create/preview utilities
+├── drizzle.config.ts               # Drizzle Kit config for Turso
 ├── next.config.ts                  # React Compiler enabled
 ├── tsconfig.json                   # Strict, path alias @/* → ./src/*
 ├── postcss.config.mjs              # @tailwindcss/postcss plugin
+├── .env                            # Template env file (no secrets)
+├── .env.local                      # Real secrets (gitignored)
 └── package.json
 ```
 
 ### File Responsibilities
 
-**`src/lib/storage.ts`** — Data layer. Defines all TypeScript interfaces (`CanvasImage`, `Artwork`, `Template`, `Orientation`, `TemplateSlot`). Wraps IndexedDB with generic `idbPut`, `idbGetAll`, `idbDelete` helpers. Exposes CRUD functions for both `artworks` and `templates` object stores.
+**`src/lib/storage.ts`** — Local data layer. Defines all TypeScript interfaces (`CanvasImage`, `LightCanvasImage`, `Artwork`, `Template`, `Draft`, `LibraryImage`, `Orientation`, `TemplateSlot`). Wraps IndexedDB (v3) with generic helpers. Exposes CRUD for `artworks`, `templates`, `draft`, and `library` object stores. Provides `imageHash()` for content-based deduplication (FNV-1a), `ensureInLibrary()` for automatic library ingestion, and `stripDataUrls()`/`rehydrateImages()` for lightweight undo snapshots.
 
-**`src/lib/canvas.ts`** — Image processing and rendering. Contains the auto-generate collage algorithm (`generatePlacements`), the manual-mode renderer (`renderManualMoodboard`), image compression for storage (`compressForStorage`), initial scatter layout (`createInitialPlacements`), and the dominant color extraction pipeline (`extractColors`).
+**`src/lib/canvas.ts`** — Image processing and rendering. Contains the auto-generate collage algorithm (`generatePlacements`), the manual-mode renderer (`renderManualMoodboard`), the cast blob renderer (`renderMoodboardToBlob`), collection thumbnail generator (`renderThumbnail`), image compression for storage (`compressForStorage`) and upload (`compressForUpload`), initial scatter layout (`createInitialPlacements`), and the dominant color extraction pipeline (`extractColors`).
 
-**`src/lib/templates.ts`** — Template system. Defines canvas dimensions per orientation (`CANVAS_DIMS`), the 5 built-in templates (`BUILT_IN_TEMPLATES`), functions to apply templates to images, convert artwork layouts to reusable templates, rescale images across orientation changes, and generate SVG preview thumbnails.
+**`src/lib/templates.ts`** — Template system. Defines canvas dimensions per orientation (`CANVAS_DIMS`), the 5 built-in templates, functions to apply templates, convert artwork layouts to reusable templates, rescale images across orientation changes, and generate SVG preview thumbnails.
 
-**`src/components/InteractiveCanvas.tsx`** — The interactive A4 canvas. Handles pointer-event-based drag, selection, resize (+/- buttons), pin/unpin toggle, delete, and z-index layering. Renders images as absolutely positioned divs with percentage-based coordinates derived from the logical canvas dimensions. Accepts `bgColor`, `imageMargin`, and `onCommit` props from the parent.
+**`src/lib/cloud.ts`** — Cloud sync logic. Handles `pushToCloud` (with incremental sync support via `since` timestamp), `pullFromCloud` (parallel IPFS image fetching), `registerUser`, and image upload with client-side compression. Uses a concurrent task runner (`runConcurrent`) with configurable parallelism (default 3) for both uploads and downloads.
 
-**`src/components/MoodboardGenerator.tsx`** — The entire application UI. Manages three views (`create`, `auto-result`, `manual`), all application state, undo/redo stacks, toolbar panels (orientation, BG color, margin, templates), the saved artworks collection, and all export actions. This is a single `'use client'` component that orchestrates everything.
+**`src/lib/auth.ts`** — Server-side security. JWT verification via `@farcaster/quick-auth`, origin validation against allowed domains, and IP-based rate limiting (sliding window, 60s buckets).
+
+**`src/lib/schema.ts`** — Drizzle ORM schema for Turso. Defines `users`, `moodboards`, and `images` tables with indexes for efficient queries by `fid` and `updatedAt`.
+
+**`src/lib/db.ts`** — Turso database client. Creates a `drizzle` instance from `@libsql/client` using env vars for URL and auth token.
+
+**`src/components/InteractiveCanvas.tsx`** — The interactive canvas. Handles drag (Pointer Events), selection, resize (+/- buttons), pin/unpin toggle, delete, and z-index layering. Floating toolbar auto-flips below the image when near the top edge of the canvas. Accepts `bgColor`, `imageMargin`, and `onCommit` props.
+
+**`src/components/ImageLibrary.tsx`** — Full-screen image library view. Grid layout with search, tag filtering, sort (newest/oldest/name), multi-select, tag editing, and "Add to Canvas" action. Images are deduplicated by content hash.
+
+**`src/components/CloudProvider.tsx`** — React context for cloud state. Manages Farcaster user detection (via `sdk.context`), authenticated API calls (`authFetch` using Quick Auth), sync orchestration with lock mechanism, and auto-sync on login. Provides `user`, `syncStatus`, `signIn`, `signOut`, and `sync` to children.
+
+**`src/components/MoodboardGenerator.tsx`** — The main application. Manages four views (`create`, `auto-result`, `manual`, `library`), all application state, lightweight undo/redo stacks with image store ref, toolbar panels, categories, auto-save drafts, the visual collection grid with thumbnails, delete confirmation, and all export actions.
 
 ---
 
 ## Application Flow
 
-The app has a three-view architecture controlled by a `view` state variable:
-
 ```
-┌─────────────────────────────────────────────────┐
-│                  CREATE VIEW                     │
-│                                                  │
-│   Title input → Caption input → Upload images    │
-│                                                  │
-│   [Generate]          [Arrange]                  │
-│                                                  │
-│   ─── Saved Collection ───                       │
-│   Artwork 1  [Duplicate] [Delete]                │
-│   Artwork 2  [Duplicate] [Delete]                │
-└────────┬──────────────────────┬──────────────────┘
-         │                      │
-    ┌────▼──────┐         ┌─────▼─────────────────┐
-    │ AUTO-     │         │ MANUAL VIEW            │
-    │ RESULT    │         │                        │
-    │           │         │ [←] [Undo][Redo] [Save]│
-    │ ← Back   │         │ [A4P][A4L][□] BG Margin│
-    │ Refresh   │         │ Templates              │
-    │           │         │ ┌──────────────────┐   │
-    │ [image]   │         │ │  Interactive     │   │
-    │           │         │ │  Canvas          │   │
-    │ Save      │         │ └──────────────────┘   │
-    │ Print     │         │ [image controls]       │
-    │ Cast      │         │ Save / Print / Cast    │
-    └───────────┘         └────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                    CREATE VIEW                       │
+│                                                      │
+│   [Library] [Sign in / Sync]                        │
+│   Title input → Caption input → Upload images        │
+│                                                      │
+│   [Generate]              [Arrange]                  │
+│                                                      │
+│   Draft recovery banner (if unsaved work exists)     │
+│                                                      │
+│   ─── Collection Grid ───                            │
+│   Search | Category filters | Sort                   │
+│   ┌─────┐ ┌─────┐ ┌─────┐                          │
+│   │thumb│ │thumb│ │thumb│  (visual thumbnails)      │
+│   │title│ │title│ │title│                            │
+│   └─────┘ └─────┘ └─────┘                          │
+└──────┬────────────────────────┬──────────────────────┘
+       │                        │
+  ┌────▼──────┐           ┌─────▼─────────────────────┐
+  │ AUTO-     │           │ MANUAL VIEW                │
+  │ RESULT    │           │                            │
+  │           │           │ [←] [Undo][Redo]     [Save]│
+  │ ← Back   │           │ [A4P][A4L][□] BG Margin    │
+  │ Refresh   │           │ Tags Templates Library [+] │
+  │           │           │ ┌──────────────────────┐   │
+  │ [image]   │           │ │  Interactive Canvas   │   │
+  │           │           │ │  [floating toolbar]   │   │
+  │ Save      │           │ └──────────────────────┘   │
+  │ Print     │           │ Save / Print / Cast        │
+  │ Cast      │           │ (auto-save every 30s)      │
+  └───────────┘           └────────────────────────────┘
+                                     │
+                          ┌──────────▼───────────────┐
+                          │ LIBRARY VIEW             │
+                          │ Search | Tag filter | Sort│
+                          │ ┌───┐ ┌───┐ ┌───┐ ┌───┐ │
+                          │ │img│ │img│ │img│ │img│ │
+                          │ └───┘ └───┘ └───┘ └───┘ │
+                          │ Multi-select → Add to    │
+                          │ Canvas                   │
+                          └──────────────────────────┘
 ```
 
-**Create → Auto-Result**: User clicks "Generate". Files are loaded into `HTMLImageElement`s, passed through the auto-placement algorithm, and rendered to a single PNG data URL.
+**Create → Auto-Result**: Files are loaded, passed through the auto-placement algorithm, and rendered to a single PNG data URL.
 
-**Create → Manual**: User clicks "Arrange". Files are compressed to JPEG data URLs (`compressForStorage`), scattered on the canvas (`createInitialPlacements`), and the manual view opens.
+**Create → Manual**: Files are compressed to JPEG data URLs, scattered on the canvas, and the manual view opens. Images are also added to the library in the background.
 
-**Collection → Manual**: User taps a saved artwork. All stored `CanvasImage` data, orientation, background color, and margin settings are restored into state.
+**Collection → Manual**: Tapping a saved artwork restores all stored state (images, orientation, background, margin, categories).
+
+**Manual → Library**: Opens the library to browse/search all uploaded images. Selected images can be added directly to the current canvas.
 
 ---
 
@@ -165,213 +183,125 @@ The app has a three-view architecture controlled by a `view` state variable:
 
 - Minimum 4, maximum 20 images
 - Accepted formats: JPEG, PNG, WebP, GIF
-- Hidden `<input type="file" multiple>` triggered by a tap-to-upload area
+- Hidden `<input type="file" multiple>` triggered by tap-to-upload area
 - Horizontal scrollable thumbnail strip with individual remove buttons
 - Counter display: `5/20`
 - Title is required; caption is optional
-- "Generate" and "Arrange" buttons appear only when `title.trim()` is non-empty and `files.length >= 4`
 
 ### Auto-Generate Mode
 
-Renders a collage to an off-screen `<canvas>` using `renderMoodboard()`.
-
-**Placement algorithm** (`generatePlacements`):
-
-1. Compute a grid based on image count and canvas aspect ratio
-2. For each image, assign a grid cell with random size multiplier (0.82–1.38×, with 22% chance of 1.35× bonus)
-3. Add random offset within the cell (±55% of cell size)
-4. Clamp positions to keep at least 90% of each image on-canvas
-5. Apply random rotation (±3°)
-6. Shuffle the draw order for natural overlapping
-7. Each image gets a white border and subtle shadow
-
-Title and caption are rendered in light type at the bottom-left.
-
-The user can **regenerate** (refresh icon) to get a new random arrangement without re-uploading.
+Renders a collage using `renderMoodboard()` with an organic scatter algorithm. Grid-based placement with random size multipliers, offsets, white borders, and subtle shadows. Title/caption rendered at bottom-left. Regenerate button shuffles the layout.
 
 ### Interactive Manual Mode
 
-The `InteractiveCanvas` component provides a fully interactive composition surface.
-
-**Drag**: Pointer Events (`pointerdown` → window-level `pointermove`/`pointerup`). The scale factor between display pixels and logical canvas pixels is computed from `containerRef.clientWidth / canvasWidth`. Coordinates are stored in logical canvas space.
-
-**Selection**: Tapping an image selects it (blue ring indicator). Tapping the canvas background deselects. Selected images are automatically brought to front (highest z-index).
-
-**Resize**: +/- buttons scale width by 0.85× or 1.18× while maintaining aspect ratio. Clamped between 30px and 95% of canvas width. Disabled for pinned images.
-
-**Pin/Unpin**: Locks an image in place. Pinned images cannot be dragged or resized. A pin icon appears in the top-right corner.
-
-**Delete**: Removes the selected image from the canvas.
-
-**Layering**: Images render in z-index order. Selecting an image automatically gives it the highest z-index.
+Full interactive composition surface with:
+- **Drag**: Pointer Events with window-level listeners for smooth off-element dragging
+- **Selection**: Blue ring indicator, auto-bring-to-front
+- **Resize**: +/- buttons (0.85× / 1.18×), aspect-ratio locked, clamped 30px–95% of canvas width
+- **Pin/Unpin**: Locks position and size. Pin icon on pinned images
+- **Delete**: Removes selected image from canvas
+- **Layering**: Z-index based, selection auto-promotes
+- **Floating toolbar**: Appears above selected image; auto-flips below when image is near the top edge (< 10% from top)
+- **Add images**: "+" button in toolbar opens file picker to add images directly to canvas without leaving the editor
 
 ### Canvas Orientation
 
-Three options, each defining logical canvas dimensions in `CANVAS_DIMS`:
-
-| Orientation | Dimensions  | Aspect Ratio |
-| ----------- | ----------- | ------------ |
+| Orientation | Dimensions   | Aspect Ratio |
+| ----------- | ------------ | ------------ |
 | Portrait    | 1080 × 1527 | 1 : √2 (A4)  |
 | Landscape   | 1527 × 1080 | √2 : 1 (A4)  |
 | Square      | 1080 × 1080 | 1 : 1        |
 
-When switching orientation, `rescaleImages()` proportionally maps all positions and sizes:
-
-- Positions scale by `newDim / oldDim` per axis
-- Sizes scale by `min(scaleX, scaleY)` to prevent distortion
-
-The current orientation is saved with the artwork and restored on load.
+Switching orientation proportionally rescales all positions and sizes.
 
 ### Undo / Redo History
 
-Tracks up to 50 state snapshots (`CanvasImage[]` arrays).
+**Memory-optimized**: Stores up to 50 lightweight snapshots (`LightCanvasImage[]` — metadata only, no image data URLs). Image blobs are held in a separate `Map<string, string>` ref (`imageStoreRef`). On undo/redo, metadata snapshots are rehydrated with blob data from the store. This reduces memory from ~200MB to ~1MB for 20 images × 50 history levels.
 
-**When snapshots are captured** (via `commitSnapshot` → `onCommit` callback):
+Keyboard shortcuts: `Cmd+Z` / `Ctrl+Z` for undo, `Cmd+Shift+Z` / `Ctrl+Y` for redo. Only active in manual view.
 
-- Before a drag starts (on `pointerdown`)
-- Before each resize click
-- Before pin toggle
-- Before delete
-- Before orientation switch
-- Before template application
+### Auto-Save Drafts
 
-**Keyboard shortcuts**: `Cmd+Z` / `Ctrl+Z` for undo, `Cmd+Shift+Z` / `Ctrl+Y` for redo. Only active in manual view.
+Every 30 seconds in manual mode, the current state is saved to IndexedDB (`draft` store, single entry with id `'current'`). On app load, if a draft exists, a recovery banner appears: "Unsaved work found — Recover / Dismiss". Draft is cleared on intentional save, export, or cast.
 
-**Button states**: Undo/redo buttons are visually dimmed (`opacity-25`) when their respective stacks are empty.
+### Moodboard Categorization
 
-History is cleared when loading a new artwork, entering manual mode, or duplicating.
+10 default categories: Inspiration, Project, Client, Personal, Color Study, Texture & Material, Typography, Brand Identity, Travel, Seasonal. Users can create custom categories. Multiple categories per moodboard. Categories are persisted with artwork and used for collection filtering.
+
+### Image Library
+
+Separate full-screen view accessible from create view and manual toolbar. Features:
+- Grid layout (3 columns mobile, 4 on wider screens)
+- Search by filename or tags
+- Tag filtering with chip-based selector
+- Sort: newest, oldest, name
+- Multi-select with visual checkmarks
+- Per-image tag editing (add/remove)
+- "Add to Canvas" action for selected images
+- Images auto-added to library when creating moodboards
+- Content-based deduplication via FNV-1a hash (`imageHash`)
+
+### Collection View
+
+Visual thumbnail grid (2 columns mobile, 3 wider) replacing the previous text list. Each card shows:
+- JPEG thumbnail preview (generated on save, ~200px wide)
+- Title, date, category chips
+- Pin indicator for favorites
+- Hover actions: pin/unpin, duplicate, delete
+
+Features: search bar, category filter chips, sort (newest/oldest/title/image count). Pinned moodboards always appear first.
+
+### Delete Confirmation
+
+Deleting an artwork shows a modal confirmation dialog ("Delete this moodboard? This action cannot be undone.") with Cancel and Delete buttons, instead of deleting immediately.
 
 ### Background Color Picker
 
-An expandable panel toggled by the "BG" button in the toolbar.
-
-**5 preset swatches**:
-| Color | Hex | Purpose |
-|----------|-----------|------------------|
-| White | `#FFFFFF` | Pure clean |
-| Off-white| `#F8F8F8` | Softer white |
-| Light gray| `#F0F0F0`| Subtle contrast |
-| Warm | `#FAF9F6` | Warm off-white |
-| Black | `#000000` | High contrast |
-
-The active color shows a scaled-up ring indicator. Background color applies to the canvas container via inline `backgroundColor` style and is included in exported PNGs.
-
-When a dark background is selected (`luminance < 128`), the title/caption text automatically switches to light colors for readability.
+Expandable panel with 5 preset swatches (white, off-white, light gray, warm off-white, black) plus extracted color suggestions. Active color shows a scaled-up ring indicator. Dark backgrounds auto-switch title/caption text to light colors.
 
 ### Color Extraction
 
-Triggered by the "Extract" link in the BG color picker.
-
-**Pipeline** (`extractColors` in `canvas.ts`):
-
-1. Sample up to 8 canvas images
-2. Draw each at 6×6 pixels (natural averaging)
-3. Read pixel data, skip near-black (`< 30`) and near-white (`> 225`)
-4. Quantize to 48-value buckets per channel
-5. Accumulate RGB sums per bucket
-6. Sort buckets by pixel count (most dominant first)
-7. For each dominant color, convert RGB → HSL, then:
-   - Reduce saturation to 15% of original
-   - Push lightness to 92–97%
-   - Convert back to RGB hex
-8. Filter out colors that are too similar to already-selected ones (Manhattan distance < 30)
-9. Return up to 3 muted background-appropriate colors
-
-Extracted colors appear as additional swatches alongside the presets.
+Samples up to 8 canvas images at 6×6 pixels, quantizes to dominant color buckets, converts to muted background-appropriate tones (15% saturation, 92–97% lightness). Returns up to 3 colors.
 
 ### Image Margin Control
 
-A toggle button ("Margin") in the toolbar.
-
-**Display**: Uses CSS `box-shadow: 0 0 0 3px white` on each image element — no layout shift.
-
-**Export**: In `renderManualMoodboard`, when margin is enabled, a white `fillRect` slightly larger than the image is drawn before each image. Border width is `max(2, canvasWidth * 0.003)` pixels.
-
-The margin state is saved with artwork and restored on load.
+Toggle adds a clean white border around each image. Display uses CSS `box-shadow`. Export renders `fillRect` borders at `max(2, canvasWidth * 0.003)` pixels.
 
 ### Templates
 
-Accessible via a bottom-sheet modal triggered by "Templates" in the toolbar.
-
-**5 built-in templates**:
-
-- **Blank** — Empty canvas, images scatter randomly
-- **Centered** — Single large image at center
-- **Diagonal** — 4 images along a diagonal
-- **Scattered** — 7 images distributed across canvas
-- **Corners** — 5 images emphasizing corners and center
-
-**Template data model**: Each slot defines `cx`, `cy` (center as 0–1 fractions), `scale` (width as fraction of canvas width), `rotation`, and `zIndex`. Image height is computed from the slot width and the image's aspect ratio.
-
-**Applying a template**: Images cycle through slots if there are more images than slots. Each placement gets a slight random rotation jitter (±0.4°) for organic feel.
-
-**Save as template**: Captures the current canvas layout as relative positions. User provides a name. Stored in the `templates` IndexedDB object store.
-
-**Preview generation**: `templatePreviewSvg()` produces inline SVG with gray rectangles representing slot positions, rendered as data-URL `<img>` elements in the template grid.
-
-User templates can be deleted; built-in templates cannot.
-
-### Save to Collection
-
-"Save" button in the manual view header. Persists the complete editable state:
-
-- Title, caption
-- All `CanvasImage` objects (including data URLs)
-- Canvas dimensions
-- Orientation, background color, margin setting
-- Creation and update timestamps
-
-If editing an existing artwork (matching `artworkId`), it updates in place. Otherwise creates a new entry with a generated ID.
-
-After saving, a brief "Saved" indicator appears for 1.5 seconds.
-
-The saved collection is listed at the bottom of the Create view, sorted by most recently updated. Each entry shows title, image count, and date.
-
-### Duplicate Artwork
-
-Available in the Create view collection list. Creates a new artwork with:
-
-- Title: `"Copy of [original title]"`
-- All images with new unique IDs
-- Same orientation, background color, margin settings
-- No `artworkId` (treated as new)
-
-Opens immediately in manual mode for editing.
+5 built-in templates (Blank, Centered, Diagonal, Scattered, Corners) plus user-created templates. Bottom-sheet UI with SVG previews. Templates use relative coordinates for device-independent layouts.
 
 ### Export: Download, Print, Cast
 
-Three export actions available in both auto-result and manual views:
+**Save/Download**: Uses Web Share API (`navigator.share`) for "Save to Camera Roll" on mobile. Falls back to anchor download (`<a download>`) on desktop. Filename derived from title.
 
-**Download**: Renders to PNG data URL, creates a temporary `<a>` element with `download` attribute, triggers click. Filename derived from title: `my-moodboard.png`.
+**Print**: Opens a new window with print-optimized HTML, auto-triggers `window.print()`.
 
-**Print**: Opens a new browser window with the PNG in a print-optimized HTML page. Auto-triggers `window.print()` after 350ms.
-
-**Cast to Farcaster**: Opens `https://warpcast.com/~/compose?text=...` with title and caption pre-filled. The user downloads the image separately and attaches it manually (Farcaster compose doesn't support direct image data URL embedding).
-
-For manual mode exports, `renderManualMoodboard` renders all images at their exact positions, sizes, rotations, and z-order onto an off-screen canvas, respecting the current background color and margin settings.
+**Cast to Farcaster**:
+1. Renders moodboard to compressed JPEG blob (max 1200px, 85% quality) via `renderMoodboardToBlob`
+2. Uploads blob to Pinata IPFS via `/api/cast-image` (FormData)
+3. Opens Farcaster compose with text + IPFS image URL embed via `sdk.actions.composeCast`
+4. Falls back to Warpcast deep link if SDK action fails
+5. Shows step-by-step status feedback ("Rendering image…", "Uploading image…", "Opening cast composer…")
 
 ### Farcaster Integration
 
-**Frame v2 metadata** in `layout.tsx`:
+- **Mini App SDK**: `sdk.actions.ready()` on load, `sdk.actions.composeCast()` for casting
+- **Mini App Metadata**: `fc:miniapp` meta tag in layout with launch action config
+- **Manifest**: `public/.well-known/farcaster.json` with account association
+- **User Context**: `sdk.context` for user FID, username, profile picture
+- **Quick Auth**: `sdk.quickAuth.fetch()` and `sdk.quickAuth.getToken()` for authenticated API calls
+- **Preconnect**: `<link rel="preconnect" href="https://auth.farcaster.xyz" />` for faster auth
 
-```json
-{
-  "version": "next",
-  "imageUrl": "https://moodboard.example.com/og.png",
-  "button": {
-    "title": "Create Moodboard",
-    "action": {
-      "type": "launch_frame",
-      "name": "Moodboard Generator",
-      "url": "https://moodboard.example.com"
-    }
-  }
-}
-```
+### Cloud Sync
 
-**Frame manifest** at `public/.well-known/farcaster.json`: Contains placeholder values for `accountAssociation` (header, payload, signature) that must be replaced with real values before deployment.
-
-The URLs (`moodboard.example.com`) are placeholders that need to be updated to the actual deployed domain.
+- **Sign in**: Automatic via Farcaster context in mini-app, or manual "Sign in" button
+- **Sync flow**: Push local artworks → Pull cloud artworks → Merge into IndexedDB
+- **Incremental sync**: Only pushes artworks modified since `lastSyncAt` timestamp
+- **Parallel operations**: Image uploads and downloads use a concurrent task runner (max 3 workers)
+- **Image deduplication**: Content hash prevents re-uploading identical images
+- **Status indicators**: "Syncing…", "Synced", "Retry" with cloud icon variants
+- **Auto-sync**: Triggers automatically when user is detected on app load
 
 ---
 
@@ -381,18 +311,20 @@ The URLs (`moodboard.example.com`) are placeholders that need to be updated to t
 
 ```typescript
 interface CanvasImage {
-  id: string; // Unique ID (e.g., "img-1708000000000-abc123")
-  dataUrl: string; // JPEG data URL (compressed to max 1000px, 80% quality)
-  x: number; // Logical x position on canvas
-  y: number; // Logical y position on canvas
-  width: number; // Logical width
-  height: number; // Logical height
-  rotation: number; // Degrees
-  pinned: boolean; // Lock state
-  zIndex: number; // Layer order
+  id: string;           // Unique ID (e.g., "img-1708000000000-abc123")
+  dataUrl: string;      // JPEG data URL (compressed to max 1000px, 80% quality)
+  x: number;            // Logical x position on canvas
+  y: number;            // Logical y position on canvas
+  width: number;        // Logical width
+  height: number;       // Logical height
+  rotation: number;     // Degrees (always 0 in manual mode)
+  pinned: boolean;      // Lock state
+  zIndex: number;       // Layer order
   naturalWidth: number; // Original (compressed) width
-  naturalHeight: number; // Original (compressed) height
+  naturalHeight: number;// Original (compressed) height
 }
+
+type LightCanvasImage = Omit<CanvasImage, 'dataUrl'>; // For undo/redo stack
 ```
 
 ### Artwork
@@ -405,11 +337,44 @@ interface Artwork {
   images: CanvasImage[];
   canvasWidth: number;
   canvasHeight: number;
-  orientation: Orientation; // 'portrait' | 'landscape' | 'square'
-  bgColor: string; // Hex color
+  orientation: 'portrait' | 'landscape' | 'square';
+  bgColor: string;
   imageMargin: boolean;
-  createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
+  categories: string[];
+  pinned: boolean;
+  createdAt: string;   // ISO 8601
+  updatedAt: string;   // ISO 8601
+  thumbnail?: string;  // Small JPEG data URL for collection preview
+}
+```
+
+### Draft
+
+```typescript
+interface Draft {
+  id: 'current';       // Always single entry
+  title: string;
+  caption: string;
+  images: CanvasImage[];
+  orientation: Orientation;
+  bgColor: string;
+  imageMargin: boolean;
+  categories: string[];
+  savedAt: string;
+}
+```
+
+### LibraryImage
+
+```typescript
+interface LibraryImage {
+  id: string;           // Content hash (FNV-1a)
+  dataUrl: string;
+  filename: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  tags: string[];
+  uploadedAt: string;
 }
 ```
 
@@ -417,10 +382,10 @@ interface Artwork {
 
 ```typescript
 interface TemplateSlot {
-  cx: number; // Center x as fraction (0–1)
-  cy: number; // Center y as fraction (0–1)
+  cx: number;    // Center x as fraction (0–1)
+  cy: number;    // Center y as fraction (0–1)
   scale: number; // Width as fraction of canvas width
-  rotation: number; // Degrees
+  rotation: number;
   zIndex: number;
 }
 
@@ -436,20 +401,174 @@ interface Template {
 
 ## Storage Architecture
 
-**IndexedDB** is used for all persistent client-side data. The database name is `moodboard-artworks` at version 2.
+### Client-Side (IndexedDB)
+
+Database name: `moodboard-artworks`, version 3.
 
 | Object Store | Key Path | Content                                          |
 | ------------ | -------- | ------------------------------------------------ |
-| `artworks`   | `id`     | Full `Artwork` objects including image data URLs |
-| `templates`  | `id`     | User-created `Template` objects (no image data)  |
+| `artworks`   | `id`     | Full `Artwork` objects including image data URLs  |
+| `templates`  | `id`     | User-created `Template` objects                   |
+| `draft`      | `id`     | Single auto-save draft entry (id: `'current'`)   |
+| `library`    | `id`     | `LibraryImage` objects (deduplicated by hash)     |
 
-IndexedDB was chosen over `localStorage` because artwork objects contain compressed image data URLs which can easily exceed localStorage's ~5–10MB limit.
+A shared `openDB()` helper handles version upgrades. Generic `idbPut`, `idbGetAll`, `idbGet`, `idbDelete` helpers avoid code duplication.
 
-The `openDB()` helper handles version upgrades gracefully — both stores are created in the `onupgradeneeded` handler with existence checks.
+### Cloud (Turso + Pinata IPFS)
 
-Generic helpers (`idbPut`, `idbGetAll`, `idbDelete`) avoid code duplication across stores.
+| Service | Purpose | Free Tier |
+| ------- | ------- | --------- |
+| Turso   | Metadata (users, moodboard state, image refs) | 9GB, 1B reads/mo |
+| Pinata  | Image binary storage (IPFS) | 1GB |
+| Vercel  | Hosting + serverless functions | 100GB bandwidth |
 
-**Backward compatibility**: When loading artworks saved before the orientation/bgColor/imageMargin fields existed, the component defaults to `orientation: 'portrait'`, `bgColor: '#f5f5f4'`, `imageMargin: false` via nullish coalescing.
+Cloud storage separates image binaries (IPFS) from moodboard metadata (Turso). Canvas state stores `imageHash` references instead of raw data URLs. On pull, images are fetched from IPFS and converted back to data URLs.
+
+---
+
+## Cloud Infrastructure
+
+### Database Schema (Turso via Drizzle ORM)
+
+```typescript
+// users table
+users: { fid (PK), username, pfpUrl, createdAt }
+
+// moodboards table (indexes: fid, fid+updatedAt)
+moodboards: {
+  id (PK), fid (FK→users), title, caption,
+  categories (JSON string[]), canvasState (JSON CloudCanvasImage[]),
+  canvasWidth, canvasHeight, background, orientation,
+  margin (boolean), pinned (boolean),
+  createdAt, updatedAt, syncVersion
+}
+
+// images table (index: fid)
+images: {
+  hash (PK), fid (FK→users), url (IPFS gateway URL),
+  filename, naturalWidth, naturalHeight,
+  tags (JSON string[]), createdAt
+}
+```
+
+### Sync Flow
+
+```
+Client                          Server (Vercel)              Cloud
+  │                                │                          │
+  │── pushToCloud(artworks) ──────►│                          │
+  │   (only artworks modified      │                          │
+  │    since lastSyncAt)           │                          │
+  │                                │── upload images ────────►│ Pinata IPFS
+  │                                │   (parallel, max 3)      │
+  │                                │── upsert moodboards ───►│ Turso
+  │                                │                          │
+  │── pullFromCloud() ───────────►│                          │
+  │                                │◄── fetch moodboards ────│ Turso
+  │                                │◄── fetch image URLs ────│ Turso
+  │◄── boards + imageMap ─────────│                          │
+  │                                │                          │
+  │── fetch IPFS images ──────────────────────────────────────►│ IPFS Gateway
+  │   (parallel, max 3)           │                          │
+  │                                │                          │
+  │── save to IndexedDB           │                          │
+```
+
+### Image Compression Pipeline
+
+All images are compressed client-side before upload:
+- **For storage** (`compressForStorage`): Max 1000px, JPEG 80%
+- **For IPFS upload** (`compressForUpload`): Max 2048px, JPEG 82%
+- **For cast image** (`renderMoodboardToBlob`): Max 1200px, JPEG 85%
+- **For thumbnails** (`renderThumbnail`): Max 200px, JPEG 60%
+
+---
+
+## API Routes
+
+All API routes are Next.js App Router serverless functions on Vercel.
+
+### `POST /api/cast-image`
+
+Uploads a moodboard image to IPFS for Farcaster cast embedding. Public endpoint (no auth required) with rate limiting (10 req/min per IP) and origin validation.
+
+- Input: FormData with `file` blob
+- Validates: file size (max 10MB), type (JPEG/PNG/WebP)
+- Materializes blob as ArrayBuffer before Pinata forwarding (Node.js compatibility)
+- Returns: `{ url, ipfsHash }`
+
+### `POST /api/images/upload`
+
+Uploads individual images to IPFS for cloud sync. Authenticated (Quick Auth JWT).
+
+- Input: FormData with `file`, `hash`, dimensions, tags
+- Validates: file size (max 15MB), required fields
+- Deduplicates: checks existing `hash` in Turso before uploading
+- Returns: `{ url, hash }`
+
+### `POST /api/sync`
+
+Pushes moodboard data to cloud. Authenticated. Validates ownership (`fid` from JWT matches board `fid`). Sanitizes inputs (title length, category count). Max 100 boards per request.
+
+### `GET /api/sync`
+
+Pulls all moodboards and associated image metadata for the authenticated user. Returns `{ boards, imageMap }`.
+
+### `POST /api/user`
+
+Registers or updates a Farcaster user. Authenticated. Upserts by `fid`.
+
+---
+
+## Authentication & Security
+
+### Farcaster Quick Auth
+
+Server-side JWT verification using `@farcaster/quick-auth`:
+
+```
+Client (Warpcast webview)
+  │── sdk.quickAuth.fetch(url, init)   // Auto-attaches JWT
+  │   OR
+  │── sdk.quickAuth.getToken()         // Manual token for custom headers
+  │
+Server (API route)
+  │── verifyAuth(req)
+  │   ├── Extract Bearer token from Authorization header
+  │   └── quickAuth.verifyJwt({ token, domain: APP_DOMAIN })
+  │       └── Returns { fid: number } or null
+```
+
+### Origin Validation
+
+All API routes call `checkOrigin(req)` which validates the `Origin` header against an allowlist:
+- Production: `https://moodboard-generator-phi.vercel.app`
+- Development: `http://localhost:3000`, `:3001`, `:3002`
+
+Requests with non-matching origins receive 403 Forbidden.
+
+### Rate Limiting
+
+The `/api/cast-image` endpoint (public, no auth) has IP-based rate limiting:
+- Sliding window: 60 seconds
+- Max requests: 10 per window per IP
+- In-memory `Map<string, { count, resetAt }>`
+- Auto-cleanup when map exceeds 10,000 entries
+- Returns 429 with `Retry-After: 60` header when exceeded
+
+### Environment Variables
+
+Secrets are stored in `.env.local` (gitignored). The `.env` file contains only placeholder templates.
+
+| Variable | Purpose |
+| -------- | ------- |
+| `TURSO_DATABASE_URL` | Turso database connection URL |
+| `TURSO_AUTH_TOKEN` | Turso auth token |
+| `PINATA_JWT` | Pinata API key for IPFS uploads |
+| `PINATA_GATEWAY` | Pinata dedicated gateway domain |
+| `APP_DOMAIN` | Domain for Quick Auth JWT verification |
+
+All variables must also be set in Vercel dashboard for production deployment.
 
 ---
 
@@ -458,7 +577,7 @@ Generic helpers (`idbPut`, `idbGetAll`, `idbDelete`) avoid code duplication acro
 ### Auto-Generate Mode
 
 ```
-File[] → loadImage() → HTMLImageElement[] → generatePlacements() → Placement[]
+File[] → loadImage() → HTMLImageElement[] → generatePlacements()
   → render to off-screen canvas (white border + shadow per image)
   → drawTitleCaption()
   → canvas.toDataURL('image/png')
@@ -468,19 +587,25 @@ File[] → loadImage() → HTMLImageElement[] → generatePlacements() → Place
 
 ```
 CanvasImage[] → loadImageFromUrl() per dataUrl → HTMLImageElement[]
-  → sort by zIndex
-  → fill canvas with bgColor
-  → for each image: translate, rotate, optional margin fillRect, drawImage
-  → drawTitleCaption() (auto-detects dark bg for text color)
+  → sort by zIndex → fill canvas with bgColor
+  → for each: translate, rotate, optional margin fillRect, drawImage
+  → drawTitleCaption() (auto-detects dark bg)
   → canvas.toDataURL('image/png')
 ```
 
-### Image Compression (for storage)
+### Cast Blob Rendering
 
 ```
-File → createObjectURL → new Image() → resize to max 1000px
-  → draw to temp canvas → toDataURL('image/jpeg', 0.8)
-  → { dataUrl, naturalWidth, naturalHeight }
+CanvasImage[] → scale to max 1200px wide → render all images
+  → canvas.toBlob('image/jpeg', 0.85) → Blob
+  → FormData upload to /api/cast-image → IPFS URL
+```
+
+### Thumbnail Generation
+
+```
+CanvasImage[] → scale to ~200px wide → render all images (no title/caption)
+  → canvas.toDataURL('image/jpeg', 0.6) → small data URL stored with artwork
 ```
 
 ---
@@ -501,52 +626,43 @@ Ultra-minimalist. The interface should be "almost invisible" — the user's imag
 | Muted text        | `#a3a3a3`    | `text-neutral-400`   |
 | Borders           | `#d4d4d4`    | `border-neutral-300` |
 | Light borders     | `#e5e5e5`    | `border-neutral-200` |
-| Canvas default BG | `#f5f5f4`    | `bg-stone-100`       |
+| Canvas default BG | `#f5f5f4`    | —                    |
 | Selection ring    | Blue 400/50% | `ring-blue-400/50`   |
 | Danger hover      | Red 500      | `hover:text-red-500` |
 | Success feedback  | Green 600    | `text-green-600`     |
 
-No shadows, gradients, or decorative elements in the UI. Only the auto-generated collage mode uses subtle shadows on images.
-
 ### Typography
 
-- **Font**: Geist Sans (variable, loaded via `next/font/google`)
-- **Weights**: 300 (light) for body text, 400 (regular) for headings
-- **Sizes**: `text-lg` for title input, `text-sm` for body, `text-[11px]` for labels and counts, `text-[10px]` for template names
-- **Labels**: 11px uppercase tracking-widest for section headers (e.g., "MOODBOARD", "SAVED", "TEMPLATES")
-
-### Spacing & Layout
-
-- Max content width: `max-w-lg` (32rem / 512px)
-- Page padding: `px-5 py-6` on create view, `px-4` in manual view
-- Gap between sections: `gap-5`
-- Touch targets: Minimum `44px × 44px` (`min-h-[44px] min-w-[44px]`)
+- **Font**: Geist Sans (variable, `next/font/google`)
+- **Weights**: 300 (light) for body, 400 for headings, 500 (medium) for thumbnail titles
+- **Sizes**: `text-lg` title input, `text-sm` body, `text-xs` buttons, `text-[11px]` labels, `text-[10px]` chips
+- **Labels**: 11px uppercase tracking-widest for section headers
 
 ### Interactive Elements
 
-- **Buttons**: Thin outline (`border border-neutral-300`) or plain text. No fills, no shadows. Rounded pill for save/pin (`rounded-full`), rounded-sm for primary actions.
-- **Inputs**: Bottom-border only, no box. Placeholder as the only label.
-- **Upload area**: Dashed border, centered plus icon.
-- **Toolbar buttons**: 32px height, 11px text, subtle background on active state (`bg-neutral-100`).
-- **Bottom sheet**: Semi-transparent overlay (`bg-black/15`), white panel with rounded top corners, drag handle bar.
+- **Buttons**: Thin outline (`border border-neutral-300`) or plain text. Pill-shaped for save. No fills or shadows.
+- **Inputs**: Bottom-border only. Placeholder as label.
+- **Collection grid**: Rounded cards with thumbnail, hover overlay actions.
+- **Bottom sheet**: Semi-transparent overlay, white panel, rounded top, drag handle.
+- **Confirmation dialog**: Centered modal with overlay, rounded corners, cancel/action buttons.
+- **Toolbar buttons**: 32px height, 11px text, subtle bg on active state.
 
 ### Icons
 
-All icons are inline SVGs with `stroke="currentColor"`, `strokeWidth="1.5"`, no fill. Sizes: 20px for action bar, 18px for undo/redo, 16px for canvas controls, 14px for collection actions, 12px for pin indicator.
+All icons are inline SVGs with `stroke="currentColor"`, `strokeWidth="1.5"`, no fill. Sizes: 20px action bar, 18px undo/redo, 14px toolbar/collection, 12px pin indicator, 10-11px hover actions.
 
 ---
 
 ## Mobile & Touch Optimization
 
-- **Viewport**: `maximumScale: 1`, `userScalable: false` — prevents accidental zoom during canvas interaction
-- **Touch targets**: All interactive elements are at least 44×44px
-- **Tap highlight**: Disabled globally (`-webkit-tap-highlight-color: transparent`)
-- **Canvas interaction**: `touch-none` class prevents browser scroll/zoom during drag. `select-none` prevents text selection.
-- **Pointer Events**: Used instead of mouse/touch events for unified handling across devices.
-- **Window-level listeners**: Drag `pointermove`/`pointerup` are on `window` so dragging continues smoothly even if the pointer leaves the image element.
-- **Overscroll**: `overscroll-behavior: none` prevents pull-to-refresh on mobile.
-- **Scrollbar hiding**: `.scrollbar-hide` utility for horizontal thumbnail strips and toolbar overflow.
-- **100dvh**: Uses `min-h-[100dvh]` to account for mobile browser chrome.
+- **Viewport**: `maximumScale: 1`, `userScalable: false`
+- **Touch targets**: All interactive elements ≥ 44×44px
+- **Canvas interaction**: `touch-none` prevents browser scroll/zoom during drag
+- **Pointer Events**: Unified handling across devices; window-level listeners for smooth dragging
+- **100dvh**: `min-h-[100dvh]` accounts for mobile browser chrome
+- **Overscroll**: `overscroll-behavior: none` prevents pull-to-refresh
+- **Web Share API**: "Save" uses `navigator.share({ files })` on mobile for native camera roll save
+- **Scrollbar hiding**: `.scrollbar-hide` utility for horizontal strips
 
 ---
 
@@ -554,103 +670,136 @@ All icons are inline SVGs with `stroke="currentColor"`, `strokeWidth="1.5"`, no 
 
 ### State Management
 
-All state lives in `MoodboardGenerator` using React `useState`. No external state library. The `InteractiveCanvas` is a controlled component receiving `images` and calling `onChange`.
+All state lives in `MoodboardGenerator` via `useState`. The `InteractiveCanvas` and `ImageLibrary` are controlled components. Cloud state is managed via `CloudProvider` context (`useCloud` hook). No external state library.
 
-### Callbacks
+### Undo/Redo Memory Optimization
 
-All event handlers and derived functions use `useCallback` with explicit dependency arrays. This works with the React Compiler (`reactCompiler: true` in next.config) for automatic memoization.
-
-### Component Communication
-
-- Parent → Child: Props (`images`, `onChange`, `onCommit`, `bgColor`, `imageMargin`, `canvasWidth`, `canvasHeight`)
-- Child → Parent: Callback invocations (`onChange` for real-time updates, `onCommit` for undo snapshots)
+Image data URLs are stored in a `useRef<Map<string, string>>` keyed by image ID. The undo/redo stacks hold `LightCanvasImage[][]` (no `dataUrl` field). `commitSnapshot()` strips data URLs via `stripDataUrls()`. `undo()`/`redo()` rehydrate snapshots via `rehydrateImages()` from the ref map.
 
 ### ID Generation
 
-All entity IDs use the pattern: `prefix-timestamp-randomAlpha6`, e.g., `img-1708000000000-x7k2m9`, `artwork-1708000000000-abc123`, `tpl-1708000000000-def456`.
+All entity IDs use: `prefix-timestamp-randomAlpha`, e.g., `img-1708000000000-x7k2m9`, `artwork-1708000000000-abc123`.
 
 ### Coordinate System
 
-The canvas uses a logical coordinate system (e.g., 1080×1527 for portrait A4). Display uses percentage-based CSS positioning derived from `(value / canvasDim) * 100%`. The scale factor (`containerWidth / canvasWidth`) converts between display and logical coordinates during drag.
-
-### Inline Styles
-
-Dynamic positioning, sizing, rotation, and background colors use inline `style` objects because they vary per-element and per-frame. Tailwind handles all static styling.
+Logical coordinates (e.g., 1080×1527 for portrait A4). Display uses percentage-based CSS: `(value / canvasDim) * 100%`. Scale factor for drag: `containerWidth / canvasWidth`.
 
 ### Error Handling
 
-Image loading and IndexedDB operations use try/catch with `console.error`. UI remains functional on failure — no error modals.
+Image loading, IndexedDB, and API calls use try/catch with `console.error`. UI remains functional on failure. Cloud sync errors show "Retry" status.
 
 ---
 
-## Configuration Files
+## Configuration & Environment
 
 ### `next.config.ts`
 
-React Compiler enabled for automatic memoization.
+React Compiler enabled (`reactCompiler: true`).
 
 ### `tsconfig.json`
 
-Strict mode. Path alias `@/*` maps to `./src/*`. Target ES2017.
+Strict mode. Path alias `@/*` → `./src/*`. Target ES2017.
 
-### `postcss.config.mjs`
+### `drizzle.config.ts`
 
-Single plugin: `@tailwindcss/postcss` (Tailwind CSS v4).
+Turso dialect, schema at `./src/lib/schema.ts`, Drizzle output at `./drizzle`. DB credentials from env vars.
 
-### `globals.css`
+### `.env` / `.env.local`
 
-- CSS variables: `--background: #ffffff`, `--foreground: #171717`
-- Tailwind theme inline: maps CSS vars to Tailwind tokens
-- Global: tap highlight removal, font smoothing, overscroll behavior
-- Utility: `.scrollbar-hide` for cross-browser scrollbar hiding
+`.env` is a template with placeholder values (no secrets, safe to commit). `.env.local` contains real secrets and is gitignored. Both `.env*` and `.env*.local` patterns are in `.gitignore`.
 
 ---
 
-## Deployment Considerations
+## Deployment
 
-Before deploying, update the following placeholders:
+### Vercel
 
-1. **`public/.well-known/farcaster.json`**: Replace `accountAssociation` fields (`header`, `payload`, `signature`) with real Farcaster account association data. Update all `moodboard.example.com` URLs.
+The app is deployed to Vercel at `moodboard-generator-phi.vercel.app`.
 
-2. **`src/app/layout.tsx`**: Update `fc:frame` metadata URLs (`imageUrl`, `url`) to the actual deployed domain.
+**Environment variables** must be set in the Vercel dashboard (not just `.env` files):
+- `TURSO_DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+- `PINATA_JWT`
+- `PINATA_GATEWAY`
+- `APP_DOMAIN`
 
-3. **OG/Splash images**: Create and deploy `og.png`, `icon.png`, and `splash.png` assets referenced in the Farcaster metadata.
+Use `printf "value" | vercel env add VAR_NAME production` (not `echo`, which adds trailing newlines).
 
-The app is entirely client-side rendered (`'use client'` components). The only server-side aspect is the static page shell from Next.js. No API routes, no server actions, no database — all data stays in the user's browser via IndexedDB.
+### Database
+
+Turso database: `moodboard-db`. Push schema changes with `npm run db:push`.
+
+### Farcaster
+
+- Update `public/.well-known/farcaster.json` with real `accountAssociation` values
+- Update `layout.tsx` `fc:miniapp` metadata URLs to deployed domain
+- Deploy OG/splash/icon images
 
 ---
 
 ## Current Status
 
-All features are implemented and the project builds cleanly with no TypeScript errors. Only linter warnings remain — all are CSS inline style warnings on elements that require dynamic styling (canvas image positions, color swatches), which are expected and acceptable.
+All features are implemented and the project builds cleanly with no TypeScript errors. Only linter warnings remain — CSS inline style warnings on elements that require dynamic styling, which are expected.
 
 ### Fully Implemented
 
-- Image upload with validation (4–20 images)
+**Core Features:**
+- Image upload with validation (4–20 images, JPEG/PNG/WebP/GIF)
 - Auto-generate collage with organic scatter algorithm
 - Interactive manual canvas (drag, resize, pin, delete, layer)
-- Canvas orientation toggle (portrait, landscape, square)
-- Undo/redo with 50-step history and keyboard shortcuts
-- Background color picker with 5 presets
-- Dominant color extraction from images
-- White margin toggle for images
+- Canvas orientation toggle (portrait A4, landscape A4, square)
+- Memory-optimized undo/redo (50-step history, lightweight snapshots, keyboard shortcuts)
+- Background color picker with 5 presets + color extraction
+- White margin toggle
 - 5 built-in templates + save custom templates
-- Save to collection (IndexedDB persistence)
-- Load saved artwork for continued editing
+- Add images directly in manual mode via file picker
+
+**Data & Organization:**
+- Save to collection with visual thumbnail previews
+- Collection grid view with search, category filter, sort
+- Delete confirmation dialog
+- Pin favorite moodboards to top
 - Duplicate artwork
-- Download as PNG
+- Moodboard categorization (10 defaults + custom)
+- Image library with search, tags, multi-select, deduplication
+- Auto-save draft (every 30s, recovery on app load)
+
+**Cloud & Sync:**
+- Farcaster Quick Auth (server-side JWT verification)
+- Cloud sync via Turso + Pinata IPFS
+- Incremental sync (only push modified artworks)
+- Parallel image uploads/downloads (max 3 concurrent)
+- Client-side image compression before IPFS upload
+- Auto-sync on login
+
+**Export & Sharing:**
+- Download PNG / Save to Camera Roll (Web Share API on mobile)
 - Print with dedicated print layout
-- Cast to Farcaster via Warpcast deep link
-- Farcaster Frame v2 metadata (placeholder URLs)
-- Mobile-first responsive design
-- Touch-optimized interactions
+- Cast to Farcaster with IPFS image embed
+- Step-by-step cast status feedback
+
+**Security:**
+- Origin validation on all API routes
+- Rate limiting on public endpoints (10 req/min per IP)
+- Secrets in `.env.local` only (gitignored)
+- Input validation and sanitization on all API routes
+- Ownership verification on sync (fid from JWT)
+
+**Farcaster Integration:**
+- Mini App SDK (`sdk.actions.ready()`, `composeCast()`)
+- `fc:miniapp` metadata + `farcaster.json` manifest
+- User context detection (FID, username, PFP)
+- Quick Auth for authenticated API calls
+- Auth preconnect for faster load
 
 ### Not Yet Implemented
 
-- Farcaster account association (requires real credentials for `farcaster.json`)
-- OG/splash image assets for Frame metadata
-- Actual deployment and domain configuration
-- Pinch-to-zoom gesture for mobile resize (uses +/- buttons instead)
-- Image rotation controls (only initial random rotation; no manual rotation UI)
+- Pinch-to-zoom gesture for mobile resize (uses +/- buttons)
+- Image rotation controls (manual rotation UI)
 - Multi-select / batch operations on canvas
 - Canvas zoom/pan for detailed work
+- Client-side encryption for private moodboards
+- Offline queue for sync (changes are lost if sync fails offline)
+- Data export (JSON + images ZIP)
+- PWA / service worker for offline use
+- Collaborative moodboards
