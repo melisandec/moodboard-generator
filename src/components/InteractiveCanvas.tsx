@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { CanvasImage } from '@/lib/storage';
+import { getObjectUrl, reconcileObjectUrls, releaseAllObjectUrls } from '@/lib/object-url-cache';
 
 interface Props {
   images: CanvasImage[];
@@ -141,6 +142,13 @@ export default function InteractiveCanvas({
     [images, bringToFront, onCommit],
   );
 
+  // Reconcile Object URL cache — revoke URLs for removed images
+  useEffect(() => {
+    const activeIds = new Set(images.map((i) => i.id));
+    reconcileObjectUrls(activeIds);
+    return () => { releaseAllObjectUrls(); };
+  }, [images]);
+
   const sorted = [...images].sort((a, b) => a.zIndex - b.zIndex);
   const marginPx = imageMargin ? 3 : 0;
   const topZ = images.length > 0 ? Math.max(...images.map((i) => i.zIndex)) + 10 : 10;
@@ -171,7 +179,7 @@ export default function InteractiveCanvas({
           }}
           onPointerDown={(e) => handlePointerDown(e, img.id)}
         >
-          <img src={img.dataUrl} alt="" className="pointer-events-none h-full w-full object-cover" draggable={false} />
+          <img src={getObjectUrl(img.id, img.dataUrl)} alt="" className="pointer-events-none h-full w-full object-cover" draggable={false} />
           {img.pinned && selectedId !== img.id && <PinIndicator />}
         </div>
       ))}

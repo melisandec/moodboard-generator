@@ -6,6 +6,7 @@ import {
   loadImage, renderMoodboard, compressForStorage, createInitialPlacements,
   renderManualMoodboard, renderMoodboardToBlob, extractColors, renderThumbnail,
 } from '@/lib/canvas';
+import { renderMoodboardToBlobOffscreen, renderThumbnailOffscreen } from '@/lib/canvas-offscreen';
 import {
   saveArtwork, loadArtworks, deleteArtwork, saveTemplate, loadTemplates, deleteTemplate,
   saveDraft, loadDraft, clearDraft, ensureInLibrary, DEFAULT_CATEGORIES,
@@ -250,12 +251,27 @@ export default function MoodboardGenerator() {
   });
 
   // -----------------------------------------------------------------------
-  // Auto-save draft (every 30s in manual view)
+  // Auto-save draft (every 30s in manual view, only when state changed)
   // -----------------------------------------------------------------------
+
+  const lastSavedDraftHash = useRef<string>('');
 
   useEffect(() => {
     if (view !== 'manual' || canvasImages.length === 0) return;
     const timer = setInterval(() => {
+      // Build a lightweight fingerprint of the current state to detect changes
+      const hash = JSON.stringify([
+        title.trim(),
+        caption.trim(),
+        canvasImages.map((img) => [img.id, img.x, img.y, img.width, img.height, img.rotation, img.zIndex, img.pinned]),
+        orientation,
+        bgColor,
+        imageMargin,
+        categories,
+      ]);
+
+      if (hash === lastSavedDraftHash.current) return; // nothing changed
+
       const draft: Draft = {
         id: 'current',
         title: title.trim(),
@@ -268,6 +284,7 @@ export default function MoodboardGenerator() {
         savedAt: new Date().toISOString(),
       };
       saveDraft(draft).then(() => {
+        lastSavedDraftHash.current = hash;
         setDraftIndicator('Draft saved');
         setTimeout(() => setDraftIndicator(null), 1500);
       }).catch(() => {});
@@ -580,7 +597,12 @@ export default function MoodboardGenerator() {
     }
 
     let thumbnail: string | undefined;
-    try { thumbnail = await renderThumbnail(canvasImages, dims.w, dims.h, bgColor, imageMargin); } catch { /* non-critical */ }
+    try {
+      thumbnail = await renderThumbnailOffscreen(
+        canvasImages, dims.w, dims.h, bgColor, imageMargin,
+        () => renderThumbnail(canvasImages, dims.w, dims.h, bgColor, imageMargin),
+      );
+    } catch { /* non-critical */ }
 
     await saveArtwork({
       id, title: title.trim() || 'Untitled', caption: caption.trim(),
@@ -700,7 +722,10 @@ export default function MoodboardGenerator() {
       let blob: Blob | null = null;
 
       if (view === 'manual' && canvasImages.length > 0) {
-        blob = await renderMoodboardToBlob(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin);
+        blob = await renderMoodboardToBlobOffscreen(
+          canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin, 0.85,
+          () => renderMoodboardToBlob(canvasImages, title.trim(), caption.trim(), dims.w, dims.h, bgColor, imageMargin),
+        );
       } else if (moodboardUrl) {
         const res = await fetch(moodboardUrl);
         blob = await res.blob();
@@ -1251,7 +1276,7 @@ export default function MoodboardGenerator() {
                   {/* Thumbnail / preview */}
                   <button onClick={() => loadArtworkForEditing(aw)} className="block w-full text-left">
                     {aw.thumbnail ? (
-                      <img src={aw.thumbnail} alt={aw.title} className="aspect-[3/4] w-full object-cover" />
+                      <img src={aw.thumbnail} alt={aw.title} loading="lazy" className="aspect-[3/4] w-full object-cover" />
                     ) : (
                       <div
                         className="flex aspect-[3/4] w-full items-center justify-center"
