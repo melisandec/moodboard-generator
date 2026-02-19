@@ -90,14 +90,14 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
   }, [images, selected, onAddToCanvas]);
 
   const chip = 'rounded-full border px-2.5 py-1 text-[10px] transition-colors';
-  const chipActive = 'border-neutral-500 bg-neutral-100 text-neutral-700';
-  const chipDefault = 'border-neutral-200 text-neutral-400 hover:text-neutral-600';
+  const chipActive = 'border-neutral-500 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200';
+  const chipDefault = 'border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300';
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-white">
+    <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2">
-        <button onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700">
+        <button onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
           ← Back
         </button>
         <p className="text-[11px] uppercase tracking-widest text-neutral-400">Library</p>
@@ -111,7 +111,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search images or tags"
-          className="w-full border-b border-neutral-200 bg-transparent pb-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+          className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent pb-1.5 text-sm text-neutral-700 dark:text-neutral-200 outline-none placeholder:text-neutral-400 focus:border-neutral-400"
         />
       </div>
 
@@ -131,7 +131,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as Sort)}
-          className="border-none bg-transparent text-[11px] text-neutral-500 outline-none"
+          className="border-none bg-transparent text-[11px] text-neutral-500 dark:text-neutral-400 outline-none"
           aria-label="Sort images"
         >
           <option value="newest">Newest</option>
@@ -159,11 +159,11 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
                   {img.tags.map((t) => (
                     <span
                       key={t}
-                      className="inline-flex items-center gap-0.5 rounded-sm bg-neutral-100 px-1 text-[9px] text-neutral-500"
+                      className="inline-flex items-center gap-0.5 rounded-sm bg-neutral-100 dark:bg-neutral-700 px-1 text-[9px] text-neutral-500 dark:text-neutral-400"
                     >
                       {t}
                       {editingId === img.id && (
-                        <button onClick={() => removeTag(img.id, t)} className="text-neutral-400 hover:text-red-500">×</button>
+                        <button onClick={() => removeTag(img.id, t)} className="text-neutral-400 hover:text-red-500 dark:hover:text-red-400">×</button>
                       )}
                     </span>
                   ))}
@@ -181,7 +181,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
                       if (e.key === 'Enter') { addTag(img.id, tagDraft); setTagDraft(''); }
                     }}
                     placeholder="tag"
-                    className="w-full border-b border-neutral-200 bg-transparent pb-0.5 text-[10px] outline-none placeholder:text-neutral-400"
+                    className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent pb-0.5 text-[10px] text-neutral-700 dark:text-neutral-200 outline-none placeholder:text-neutral-400"
                     autoFocus
                   />
                   <button onClick={() => { setEditingId(null); setTagDraft(''); }} className="text-[9px] text-neutral-400">Done</button>
@@ -189,7 +189,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
               ) : (
                 <button
                   onClick={(e) => { e.stopPropagation(); setEditingId(img.id); }}
-                  className="mt-0.5 text-[9px] text-neutral-300 hover:text-neutral-500"
+                  className="mt-0.5 text-[9px] text-neutral-300 dark:text-neutral-600 hover:text-neutral-500 dark:hover:text-neutral-400"
                 >
                   + tag
                 </button>
@@ -203,7 +203,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
               {/* Delete */}
               <button
                 onClick={(e) => { e.stopPropagation(); deleteImg(img.id); }}
-                className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-[10px] text-neutral-400 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/80 dark:bg-neutral-800/80 text-[10px] text-neutral-400 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                 style={{ opacity: undefined }}
                 aria-label="Delete"
               >×</button>
@@ -216,7 +216,7 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
             <p className="text-sm text-neutral-400">
               {images.length === 0 ? 'No images in library yet' : 'No matching images'}
             </p>
-            <p className="mt-1 text-[11px] text-neutral-300">
+            <p className="mt-1 text-[11px] text-neutral-300 dark:text-neutral-600">
               {images.length === 0 ? 'Images are added when you create moodboards' : 'Try a different search or filter'}
             </p>
           </div>
@@ -225,12 +225,12 @@ export default function ImageLibrary({ onBack, onAddToCanvas }: Props) {
 
       {/* Action bar */}
       {selected.size > 0 && (
-        <div className="sticky bottom-0 border-t border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur-sm">
+        <div className="sticky bottom-0 border-t border-neutral-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 px-4 py-3 backdrop-blur-sm">
           <div className="mx-auto flex max-w-lg items-center justify-between">
             <p className="text-[11px] text-neutral-500">{selected.size} selected</p>
             <button
               onClick={handleAdd}
-              className="flex min-h-[44px] items-center rounded-full border border-neutral-300 px-4 text-xs text-neutral-600 hover:border-neutral-500"
+              className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-4 text-xs text-neutral-600 dark:text-neutral-300 hover:border-neutral-500"
             >
               Add to Canvas
             </button>

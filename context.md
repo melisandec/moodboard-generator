@@ -204,15 +204,15 @@ Full interactive composition surface with:
 - **Floating toolbar**: Appears above selected image; auto-flips below when image is near the top edge (< 10% from top)
 - **Add images**: "+" button in toolbar opens file picker to add images directly to canvas without leaving the editor
 
-### Canvas Orientation
+### Canvas Format
 
-| Orientation | Dimensions   | Aspect Ratio |
-| ----------- | ------------ | ------------ |
-| Portrait    | 1080 × 1527 | 1 : √2 (A4)  |
-| Landscape   | 1527 × 1080 | √2 : 1 (A4)  |
-| Square      | 1080 × 1080 | 1 : 1        |
+| Format          | Dimensions   | Aspect Ratio | Icon        |
+| --------------- | ------------ | ------------ | ----------- |
+| Tall rectangle  | 1080 × 1527 | 1 : √2 (A4)  | Vertical bar |
+| Long rectangle  | 1527 × 1080 | √2 : 1 (A4)  | Horizontal bar |
+| Square          | 1080 × 1080 | 1 : 1        | Square      |
 
-Switching orientation proportionally rescales all positions and sizes.
+Switching format proportionally rescales all positions and sizes.
 
 ### Undo / Redo History
 
@@ -337,7 +337,7 @@ interface Artwork {
   images: CanvasImage[];
   canvasWidth: number;
   canvasHeight: number;
-  orientation: 'portrait' | 'landscape' | 'square';
+  format: 'tall' | 'long' | 'square';
   bgColor: string;
   imageMargin: boolean;
   categories: string[];
@@ -616,7 +616,7 @@ CanvasImage[] → scale to ~200px wide → render all images (no title/caption)
 
 Ultra-minimalist. The interface should be "almost invisible" — the user's images and composition are the complete focus. Every UI element exists only because it's necessary.
 
-### Colors
+### Colors (Light Mode)
 
 | Usage             | Color        | Tailwind Class       |
 | ----------------- | ------------ | -------------------- |
@@ -630,6 +630,110 @@ Ultra-minimalist. The interface should be "almost invisible" — the user's imag
 | Selection ring    | Blue 400/50% | `ring-blue-400/50`   |
 | Danger hover      | Red 500      | `hover:text-red-500` |
 | Success feedback  | Green 600    | `text-green-600`     |
+
+### Colors (Dark Mode)
+
+Dark mode uses a dark grey palette (not pure black) for reduced eye strain and better contrast.
+
+| Usage             | Color        | Tailwind Class              |
+| ----------------- | ------------ | --------------------------- |
+| Background        | `#1a1a1a`    | `dark:bg-neutral-900`       |
+| Surface/Card      | `#262626`    | `dark:bg-neutral-800`       |
+| Elevated surface  | `#333333`    | `dark:bg-neutral-700`       |
+| Primary text      | `#f5f5f5`    | `dark:text-neutral-100`     |
+| Secondary text    | `#a3a3a3`    | `dark:text-neutral-400`     |
+| Muted text        | `#737373`    | `dark:text-neutral-500`     |
+| Borders           | `#404040`    | `dark:border-neutral-700`   |
+| Light borders     | `#333333`    | `dark:border-neutral-800`   |
+| Canvas default BG | `#262626`    | —                           |
+| Selection ring    | Blue 400/50% | `dark:ring-blue-400/50`     |
+| Danger hover      | Red 400      | `dark:hover:text-red-400`   |
+| Success feedback  | Green 400    | `dark:text-green-400`       |
+
+### Dark Mode Implementation
+
+**Toggle**: Manual sun/moon toggle button in the top-right corner of the header. Uses `darkMode: 'class'` in Tailwind config so the user controls the theme (not system preference).
+
+**State persistence**: Theme preference stored in `localStorage` under key `'theme'` (`'light'` | `'dark'`). On load, check localStorage first; if not set, default to light mode.
+
+**Configuration**: Set `darkMode: 'class'` in Tailwind config. The `dark` class is added/removed from `<html>` element.
+
+**Theme Toggle Component** (in header, top-right):
+
+```tsx
+const [isDark, setIsDark] = useState(false);
+
+useEffect(() => {
+  const stored = localStorage.getItem('theme');
+  const dark = stored === 'dark';
+  setIsDark(dark);
+  document.documentElement.classList.toggle('dark', dark);
+}, []);
+
+const toggleTheme = () => {
+  const next = !isDark;
+  setIsDark(next);
+  localStorage.setItem('theme', next ? 'dark' : 'light');
+  document.documentElement.classList.toggle('dark', next);
+};
+
+// Toggle button (top-right of header)
+<button
+  onClick={toggleTheme}
+  className="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+>
+  {isDark ? (
+    // Sun icon (show in dark mode → click to go light)
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="12" r="5" />
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </svg>
+  ) : (
+    // Moon icon (show in light mode → click to go dark)
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  )}
+</button>
+```
+
+**CSS Variables** (in `globals.css`):
+
+```css
+:root {
+  --background: #ffffff;
+  --foreground: #404040;
+  --surface: #f5f5f5;
+  --border: #d4d4d4;
+}
+
+.dark {
+  --background: #1a1a1a;
+  --foreground: #f5f5f5;
+  --surface: #262626;
+  --border: #404040;
+}
+```
+
+**Flash prevention**: Add inline script in `<head>` of `layout.tsx` to set `dark` class before paint:
+
+```html
+<script dangerouslySetInnerHTML={{ __html: `
+  (function() {
+    const theme = localStorage.getItem('theme');
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+  })();
+`}} />
+```
+
+**Key considerations**:
+- Canvas export should always use the selected canvas `bgColor`, regardless of app theme
+- Image thumbnails and previews need sufficient contrast on dark surfaces
+- Button outlines use `border-neutral-600` in dark mode for visibility
+- Modal overlays use `bg-black/60` instead of `bg-black/40` in dark mode
+- Toggle button uses 20px icons matching the action bar icon size
+- Smooth transition on hover (`transition-colors`)
 
 ### Typography
 
@@ -682,7 +786,7 @@ All entity IDs use: `prefix-timestamp-randomAlpha`, e.g., `img-1708000000000-x7k
 
 ### Coordinate System
 
-Logical coordinates (e.g., 1080×1527 for portrait A4). Display uses percentage-based CSS: `(value / canvasDim) * 100%`. Scale factor for drag: `containerWidth / canvasWidth`.
+Logical coordinates (e.g., 1080×1527 for tall rectangle). Display uses percentage-based CSS: `(value / canvasDim) * 100%`. Scale factor for drag: `containerWidth / canvasWidth`.
 
 ### Error Handling
 
@@ -747,7 +851,7 @@ All features are implemented and the project builds cleanly with no TypeScript e
 - Image upload with validation (4–20 images, JPEG/PNG/WebP/GIF)
 - Auto-generate collage with organic scatter algorithm
 - Interactive manual canvas (drag, resize, pin, delete, layer)
-- Canvas orientation toggle (portrait A4, landscape A4, square)
+- Canvas format toggle (tall rectangle, long rectangle, square)
 - Memory-optimized undo/redo (50-step history, lightweight snapshots, keyboard shortcuts)
 - Background color picker with 5 presets + color extraction
 - White margin toggle

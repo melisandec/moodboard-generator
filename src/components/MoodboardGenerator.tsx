@@ -80,6 +80,19 @@ const CloudIcon = () => (
     <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
   </svg>
 );
+
+const SunIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="5" />
+    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+);
 const CloudSyncedIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><path d="M9 15l2 2 4-4" />
@@ -92,10 +105,10 @@ const CloudErrorIcon = () => (
 );
 
 function ActionBar({ onDownload, onPrint, onCast, castStatus }: { onDownload: () => void; onPrint: () => void; onCast: () => void; castStatus?: string | null }) {
-  const btn = 'flex min-h-[44px] min-w-[44px] flex-col items-center gap-1 text-neutral-500 transition-colors hover:text-neutral-700 disabled:opacity-40';
+  const btn = 'flex min-h-[44px] min-w-[44px] flex-col items-center gap-1 text-neutral-500 transition-colors hover:text-neutral-700 dark:hover:text-neutral-300 disabled:opacity-40';
   const isCasting = !!castStatus;
   return (
-    <div className="sticky bottom-0 border-t border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur-sm">
+    <div className="sticky bottom-0 border-t border-neutral-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 px-4 py-3 backdrop-blur-sm">
       {isCasting && (
         <p className="mb-2 text-center text-[11px] text-neutral-500 animate-pulse">{castStatus}</p>
       )}
@@ -169,6 +182,28 @@ export default function MoodboardGenerator() {
   const { user: cloudUser, syncStatus, signIn: cloudSignIn, sync: cloudSync } = useCloud();
   const canGenerate = title.trim().length > 0 && files.length >= MIN_IMAGES;
   const dims = CANVAS_DIMS[orientation];
+
+  // Dark mode
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  const toggleTheme = useCallback(() => {
+    setIsDark((prev) => {
+      const next = !prev;
+      if (next) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+      return next;
+    });
+  }, []);
 
   // -----------------------------------------------------------------------
   // Initialize SDK, load persisted data, check for draft
@@ -784,36 +819,37 @@ export default function MoodboardGenerator() {
   // =====================================================================
 
   if (view === 'manual') {
-    const orBtn = (o: Orientation, label: string) => (
+    const formatBtn = (o: Orientation, icon: React.ReactNode) => (
       <button
         onClick={() => switchOrientation(o)}
-        className={`flex h-8 items-center justify-center rounded px-2 text-[11px] transition-colors ${
-          orientation === o ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'
+        className={`flex h-8 w-8 items-center justify-center rounded transition-colors ${
+          orientation === o ? 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'
         }`}
+        aria-label={o === 'portrait' ? 'Tall rectangle' : o === 'landscape' ? 'Long rectangle' : 'Square'}
       >
-        {label}
+        {icon}
       </button>
     );
 
     const chipCls = (active: boolean) =>
-      `rounded-full border px-2.5 py-1 text-[10px] transition-colors ${active ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`;
+      `rounded-full border px-2.5 py-1 text-[10px] transition-colors ${active ? 'border-neutral-500 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`;
 
     return (
-      <div className="flex min-h-[100dvh] flex-col bg-white">
+      <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
         {/* Header */}
         <header className="flex items-center justify-between gap-2 px-4 py-2">
-          <button onClick={() => setView('create')} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700">
+          <button onClick={() => setView('create')} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
             ← Back
           </button>
           <div className="flex items-center gap-1">
-            <button onClick={undo} disabled={undoStack.length === 0} className="flex h-10 w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-600 disabled:opacity-25" aria-label="Undo"><UndoIcon /></button>
-            <button onClick={redo} disabled={redoStack.length === 0} className="flex h-10 w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-600 disabled:opacity-25" aria-label="Redo"><RedoIcon /></button>
+            <button onClick={undo} disabled={undoStack.length === 0} className="flex h-10 w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-25" aria-label="Undo"><UndoIcon /></button>
+            <button onClick={redo} disabled={redoStack.length === 0} className="flex h-10 w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-25" aria-label="Redo"><RedoIcon /></button>
           </div>
           <div className="flex items-center gap-2">
             {draftIndicator && <span className="text-[10px] text-neutral-400 animate-pulse">{draftIndicator}</span>}
-            {saveMsg && <span className="text-xs text-green-600">{saveMsg}</span>}
+            {saveMsg && <span className="text-xs text-green-600 dark:text-green-400">{saveMsg}</span>}
             {cloudUser && syncStatus === 'syncing' && <span className="text-[10px] text-neutral-400 animate-pulse">Syncing</span>}
-            <button onClick={saveToCollection} className="flex min-h-[44px] items-center rounded-full border border-neutral-300 px-3 text-[11px] text-neutral-600 hover:border-neutral-500">
+            <button onClick={saveToCollection} className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-3 text-[11px] text-neutral-600 dark:text-neutral-300 hover:border-neutral-500">
               Save
             </button>
           </div>
@@ -821,43 +857,55 @@ export default function MoodboardGenerator() {
 
         {/* Toolbar */}
         <div className="scrollbar-hide flex items-center gap-2 overflow-x-auto px-4 pb-2">
-          <div className="flex gap-0.5 rounded-md border border-neutral-200 p-0.5">
-            {orBtn('portrait', 'A4 P')}
-            {orBtn('landscape', 'A4 L')}
-            {orBtn('square', '1 : 1')}
+          <div className="flex gap-0.5 rounded-md border border-neutral-200 dark:border-neutral-700 p-0.5">
+            {formatBtn('portrait', (
+              <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor">
+                <rect x="1" y="1" width="10" height="14" rx="1" />
+              </svg>
+            ))}
+            {formatBtn('landscape', (
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
+                <rect x="1" y="1" width="14" height="10" rx="1" />
+              </svg>
+            ))}
+            {formatBtn('square', (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                <rect x="1" y="1" width="12" height="12" rx="1" />
+              </svg>
+            ))}
           </div>
 
-          <div className="h-5 w-px bg-neutral-200" />
+          <div className="h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
 
-          <button onClick={() => setShowBgPicker((p) => !p)} className={`flex h-8 items-center gap-1.5 rounded px-2 text-[11px] transition-colors ${showBgPicker ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
-            <span className="inline-block h-3.5 w-3.5 rounded-full border border-neutral-300" style={{ backgroundColor: bgColor }} />
+          <button onClick={() => setShowBgPicker((p) => !p)} className={`flex h-8 items-center gap-1.5 rounded px-2 text-[11px] transition-colors ${showBgPicker ? 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`}>
+            <span className="inline-block h-3.5 w-3.5 rounded-full border border-neutral-300 dark:border-neutral-600" style={{ backgroundColor: bgColor }} />
             BG
           </button>
 
-          <button onClick={() => { commitSnapshot(); setImageMargin((p) => !p); }} className={`flex h-8 items-center gap-1 rounded px-2 text-[11px] transition-colors ${imageMargin ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
+          <button onClick={() => { commitSnapshot(); setImageMargin((p) => !p); }} className={`flex h-8 items-center gap-1 rounded px-2 text-[11px] transition-colors ${imageMargin ? 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={imageMargin ? 2.5 : 1.5} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>
             Margin
           </button>
 
-          <div className="h-5 w-px bg-neutral-200" />
+          <div className="h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
 
-          <button onClick={() => setShowCatRow((p) => !p)} className={`flex h-8 items-center rounded px-2 text-[11px] transition-colors ${showCatRow ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400 hover:text-neutral-600'}`}>
+          <button onClick={() => setShowCatRow((p) => !p)} className={`flex h-8 items-center rounded px-2 text-[11px] transition-colors ${showCatRow ? 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`}>
             Tags
           </button>
 
-          <button onClick={() => setShowTemplates(true)} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600">
+          <button onClick={() => setShowTemplates(true)} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
             Templates
           </button>
 
-          <button onClick={() => setView('library')} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600">
+          <button onClick={() => setView('library')} className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
             Library
           </button>
 
-          <div className="h-5 w-px bg-neutral-200" />
+          <div className="h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
 
           <button
             onClick={() => manualFileRef.current?.click()}
-            className="flex h-8 items-center gap-1 rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600"
+            className="flex h-8 items-center gap-1 rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -882,22 +930,22 @@ export default function MoodboardGenerator() {
               <button
                 key={c}
                 onClick={() => setBgColor(c)}
-                className={`h-7 w-7 rounded-full border-2 transition-transform ${bgColor === c ? 'border-neutral-500 scale-110' : 'border-neutral-200 hover:scale-105'}`}
+                className={`h-7 w-7 rounded-full border-2 transition-transform ${bgColor === c ? 'border-neutral-500 scale-110' : 'border-neutral-200 dark:border-neutral-600 hover:scale-105'}`}
                 style={{ backgroundColor: c }}
                 aria-label={c}
               />
             ))}
-            <div className="h-5 w-px bg-neutral-200" />
+            <div className="h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
             {extractedColors.map((c) => (
               <button
                 key={c}
                 onClick={() => setBgColor(c)}
-                className={`h-7 w-7 rounded-full border-2 transition-transform ${bgColor === c ? 'border-neutral-500 scale-110' : 'border-neutral-200 hover:scale-105'}`}
+                className={`h-7 w-7 rounded-full border-2 transition-transform ${bgColor === c ? 'border-neutral-500 scale-110' : 'border-neutral-200 dark:border-neutral-600 hover:scale-105'}`}
                 style={{ backgroundColor: c }}
                 aria-label={c}
               />
             ))}
-            <button onClick={doExtract} className="text-[10px] text-neutral-400 hover:text-neutral-600 underline underline-offset-2">
+            <button onClick={doExtract} className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2">
               Extract
             </button>
           </div>
@@ -918,7 +966,7 @@ export default function MoodboardGenerator() {
                 onChange={(e) => setNewCatDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addCustomCategory(); }}
                 placeholder="+"
-                className="w-12 border-b border-neutral-200 bg-transparent text-center text-[10px] outline-none placeholder:text-neutral-300 focus:border-neutral-400"
+                className="w-12 border-b border-neutral-200 dark:border-neutral-700 bg-transparent text-center text-[10px] text-neutral-700 dark:text-neutral-300 outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:border-neutral-400"
               />
             </div>
           </div>
@@ -943,9 +991,9 @@ export default function MoodboardGenerator() {
         {/* Template bottom sheet */}
         {showTemplates && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setShowTemplates(false)}>
-            <div className="flex-1 bg-black/15" />
-            <div className="max-h-[65vh] overflow-y-auto rounded-t-xl bg-white px-4 pb-6 pt-3" onClick={(e) => e.stopPropagation()}>
-              <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-neutral-300" />
+            <div className="flex-1 bg-black/15 dark:bg-black/40" />
+            <div className="max-h-[65vh] overflow-y-auto rounded-t-xl bg-white dark:bg-neutral-800 px-4 pb-6 pt-3" onClick={(e) => e.stopPropagation()}>
+              <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-neutral-300 dark:bg-neutral-600" />
               <p className="mb-3 text-[11px] uppercase tracking-widest text-neutral-400">Templates</p>
               <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
                 {allTemplates.map((tpl) => (
@@ -954,14 +1002,14 @@ export default function MoodboardGenerator() {
                       <img
                         src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(templatePreviewSvg(tpl.slots))}`}
                         alt={tpl.name}
-                        className="w-full rounded border border-neutral-100"
+                        className="w-full rounded border border-neutral-100 dark:border-neutral-700"
                       />
-                      <span className="text-[10px] text-neutral-500">{tpl.name}</span>
+                      <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{tpl.name}</span>
                     </button>
                     {!tpl.isBuiltIn && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id); }}
-                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] text-neutral-400 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white dark:bg-neutral-700 text-[9px] text-neutral-400 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                         style={{ opacity: 1 }}
                         aria-label="Delete template"
                       >×</button>
@@ -970,7 +1018,7 @@ export default function MoodboardGenerator() {
                 ))}
               </div>
 
-              <div className="mt-4 border-t border-neutral-100 pt-3">
+              <div className="mt-4 border-t border-neutral-100 dark:border-neutral-700 pt-3">
                 {savingTemplate ? (
                   <div className="flex gap-2">
                     <input
@@ -979,14 +1027,14 @@ export default function MoodboardGenerator() {
                       onChange={(e) => setTemplateNameDraft(e.target.value)}
                       placeholder="Template name"
                       maxLength={40}
-                      className="flex-1 border-b border-neutral-300 bg-transparent pb-1 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-500"
+                      className="flex-1 border-b border-neutral-300 dark:border-neutral-600 bg-transparent pb-1 text-sm text-neutral-700 dark:text-neutral-200 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
                       autoFocus
                     />
-                    <button onClick={saveAsTemplate} disabled={!templateNameDraft.trim()} className="text-xs text-neutral-600 hover:text-neutral-800 disabled:opacity-40">Save</button>
+                    <button onClick={saveAsTemplate} disabled={!templateNameDraft.trim()} className="text-xs text-neutral-600 dark:text-neutral-300 hover:text-neutral-800 dark:hover:text-white disabled:opacity-40">Save</button>
                     <button onClick={() => setSavingTemplate(false)} className="text-xs text-neutral-400">Cancel</button>
                   </div>
                 ) : (
-                  <button onClick={() => setSavingTemplate(true)} className="text-xs text-neutral-500 hover:text-neutral-700">
+                  <button onClick={() => setSavingTemplate(true)} className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300">
                     Save current layout as template
                   </button>
                 )}
@@ -1004,10 +1052,10 @@ export default function MoodboardGenerator() {
 
   if (view === 'auto-result' && moodboardUrl) {
     return (
-      <div className="flex min-h-[100dvh] flex-col bg-white">
+      <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
         <header className="flex items-center justify-between px-4 py-3">
-          <button onClick={() => setView('create')} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700">← Back</button>
-          <button onClick={regenerate} disabled={isProcessing} className="flex min-h-[44px] min-w-[44px] items-center justify-center text-neutral-500 hover:text-neutral-700 disabled:opacity-40">
+          <button onClick={() => setView('create')} className="flex min-h-[44px] min-w-[44px] items-center text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">← Back</button>
+          <button onClick={regenerate} disabled={isProcessing} className="flex min-h-[44px] min-w-[44px] items-center justify-center text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 disabled:opacity-40">
             {isProcessing ? <Spinner /> : <RefreshIcon />}
           </button>
         </header>
@@ -1024,16 +1072,16 @@ export default function MoodboardGenerator() {
   // =====================================================================
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-white">
+    <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-5 py-6">
 
         {/* Draft recovery banner */}
         {pendingDraft && (
-          <div className="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
-            <span className="text-sm text-neutral-600">Unsaved work found</span>
+          <div className="flex items-center justify-between rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-4 py-3">
+            <span className="text-sm text-neutral-600 dark:text-neutral-300">Unsaved work found</span>
             <div className="flex gap-3">
-              <button onClick={recoverDraft} className="text-sm font-medium text-neutral-700 hover:text-neutral-900">Recover</button>
-              <button onClick={dismissDraft} className="text-sm text-neutral-400 hover:text-neutral-600">Dismiss</button>
+              <button onClick={recoverDraft} className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-white">Recover</button>
+              <button onClick={dismissDraft} className="text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">Dismiss</button>
             </div>
           </div>
         )}
@@ -1041,14 +1089,21 @@ export default function MoodboardGenerator() {
         <div className="flex items-center justify-between">
           <p className="text-[11px] uppercase tracking-widest text-neutral-400">Moodboard</p>
           <div className="flex items-center gap-3">
-            <button onClick={() => setView('library')} className="text-[11px] text-neutral-400 hover:text-neutral-600">
+            <button
+              onClick={toggleTheme}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <SunIcon /> : <MoonIcon />}
+            </button>
+            <button onClick={() => setView('library')} className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
               Library
             </button>
             {cloudUser ? (
               <button
                 onClick={() => cloudSync().then(() => refreshCollection()).catch(() => {})}
                 disabled={syncStatus === 'syncing'}
-                className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 disabled:opacity-40"
+                className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40"
               >
                 {cloudUser.pfpUrl && (
                   <img src={cloudUser.pfpUrl} alt="" className="h-4 w-4 rounded-full" />
@@ -1064,7 +1119,7 @@ export default function MoodboardGenerator() {
                 )}
               </button>
             ) : (
-              <button onClick={() => cloudSignIn().catch(() => {})} className="text-[11px] text-neutral-400 hover:text-neutral-600">
+              <button onClick={() => cloudSignIn().catch(() => {})} className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
                 Sign in
               </button>
             )}
@@ -1074,20 +1129,20 @@ export default function MoodboardGenerator() {
         <input
           type="text" value={title} onChange={(e) => setTitle(e.target.value)}
           placeholder="Title" maxLength={80}
-          className="w-full border-b border-neutral-300 bg-transparent pb-2 text-lg font-light text-neutral-800 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-500"
+          className="w-full border-b border-neutral-300 dark:border-neutral-600 bg-transparent pb-2 text-lg font-light text-neutral-800 dark:text-neutral-100 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-500"
         />
 
         <textarea
           value={caption} onChange={(e) => setCaption(e.target.value)}
           placeholder="Add a caption (optional)" maxLength={280} rows={2}
-          className="w-full resize-none border-b border-neutral-300 bg-transparent pb-2 text-sm font-light text-neutral-600 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-500"
+          className="w-full resize-none border-b border-neutral-300 dark:border-neutral-600 bg-transparent pb-2 text-sm font-light text-neutral-600 dark:text-neutral-300 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-500"
         />
 
         <div>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={files.length >= MAX_IMAGES}
-            className="flex min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-neutral-300 py-8 text-neutral-400 hover:border-neutral-400 hover:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-neutral-300 dark:border-neutral-600 py-8 text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-500 hover:text-neutral-500 dark:hover:text-neutral-300 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <PlusIcon />
             <span className="text-xs">{files.length === 0 ? 'Add images' : 'Add more'}</span>
@@ -1101,7 +1156,7 @@ export default function MoodboardGenerator() {
             {previewUrls.map((url, i) => (
               <div key={url} className="relative h-[60px] w-[60px] flex-shrink-0">
                 <img src={url} alt="" className="h-full w-full rounded-sm object-cover" />
-                <button onClick={() => removeImage(i)} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 bg-white text-xs leading-none text-neutral-500 hover:text-neutral-700" aria-label="Remove image">×</button>
+                <button onClick={() => removeImage(i)} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-xs leading-none text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300" aria-label="Remove image">×</button>
               </div>
             ))}
           </div>
@@ -1113,10 +1168,10 @@ export default function MoodboardGenerator() {
 
         {canGenerate && (
           <div className="flex gap-3">
-            <button onClick={generate} disabled={isProcessing} className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 py-3 text-sm font-light text-neutral-600 hover:border-neutral-500 hover:text-neutral-800 disabled:opacity-50">
+            <button onClick={generate} disabled={isProcessing} className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 dark:border-neutral-600 py-3 text-sm font-light text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-100 disabled:opacity-50">
               {isProcessing ? <span className="flex items-center gap-2"><Spinner /> Processing…</span> : 'Generate'}
             </button>
-            <button onClick={enterManualMode} disabled={isProcessing} className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 py-3 text-sm font-light text-neutral-600 hover:border-neutral-500 hover:text-neutral-800 disabled:opacity-50">
+            <button onClick={enterManualMode} disabled={isProcessing} className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 dark:border-neutral-600 py-3 text-sm font-light text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-100 disabled:opacity-50">
               Arrange
             </button>
           </div>
@@ -1131,7 +1186,7 @@ export default function MoodboardGenerator() {
         {/* ============================================================ */}
 
         {savedArtworks.length > 0 && (
-          <div className="mt-2 border-t border-neutral-200 pt-4">
+          <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-4">
             <p className="mb-3 text-[11px] uppercase tracking-widest text-neutral-400">Collection</p>
 
             {/* Search */}
@@ -1140,7 +1195,7 @@ export default function MoodboardGenerator() {
               value={colSearch}
               onChange={(e) => setColSearch(e.target.value)}
               placeholder="Search collection"
-              className="mb-2 w-full border-b border-neutral-200 bg-transparent pb-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+              className="mb-2 w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent pb-1.5 text-sm text-neutral-700 dark:text-neutral-200 outline-none placeholder:text-neutral-400 focus:border-neutral-400"
             />
 
             {/* Category filter + sort */}
@@ -1148,7 +1203,7 @@ export default function MoodboardGenerator() {
               <div className="scrollbar-hide flex gap-1 overflow-x-auto">
                 <button
                   onClick={() => setColCatFilter(null)}
-                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === null ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`}
+                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === null ? 'border-neutral-500 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`}
                 >
                   All
                 </button>
@@ -1156,7 +1211,7 @@ export default function MoodboardGenerator() {
                   <button
                     key={cat}
                     onClick={() => setColCatFilter(cat)}
-                    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === cat ? 'border-neutral-500 bg-neutral-100 text-neutral-700' : 'border-neutral-200 text-neutral-400 hover:text-neutral-600'}`}
+                    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] transition-colors ${colCatFilter === cat ? 'border-neutral-500 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200' : 'border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'}`}
                   >
                     {cat}
                   </button>
@@ -1165,7 +1220,7 @@ export default function MoodboardGenerator() {
               <select
                 value={colSort}
                 onChange={(e) => setColSort(e.target.value as ColSort)}
-                className="ml-2 flex-shrink-0 border-none bg-transparent text-[10px] text-neutral-500 outline-none"
+                className="ml-2 flex-shrink-0 border-none bg-transparent text-[10px] text-neutral-500 dark:text-neutral-400 outline-none"
                 aria-label="Sort collection"
               >
                 <option value="newest">Newest</option>
@@ -1178,7 +1233,7 @@ export default function MoodboardGenerator() {
             {/* Artwork grid */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {filteredArtworks.map((aw) => (
-                <div key={aw.id} className="group relative overflow-hidden rounded-md border border-neutral-100">
+                <div key={aw.id} className="group relative overflow-hidden rounded-md border border-neutral-100 dark:border-neutral-700">
                   {/* Thumbnail / preview */}
                   <button onClick={() => loadArtworkForEditing(aw)} className="block w-full text-left">
                     {aw.thumbnail ? (
@@ -1191,13 +1246,13 @@ export default function MoodboardGenerator() {
                         <span className="text-[10px] text-neutral-400">{aw.images.length} images</span>
                       </div>
                     )}
-                    <div className="px-2 py-1.5">
-                      <p className="truncate text-xs font-medium text-neutral-700">{aw.title}</p>
+                    <div className="px-2 py-1.5 bg-white dark:bg-neutral-800">
+                      <p className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-200">{aw.title}</p>
                       <p className="text-[10px] text-neutral-400">{new Date(aw.updatedAt).toLocaleDateString()}</p>
                       {(aw.categories ?? []).length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-0.5">
                           {(aw.categories ?? []).slice(0, 2).map((c) => (
-                            <span key={c} className="rounded-sm bg-neutral-100 px-1 text-[8px] text-neutral-500">{c}</span>
+                            <span key={c} className="rounded-sm bg-neutral-100 dark:bg-neutral-700 px-1 text-[8px] text-neutral-500 dark:text-neutral-400">{c}</span>
                           ))}
                           {(aw.categories ?? []).length > 2 && (
                             <span className="text-[8px] text-neutral-400">+{(aw.categories ?? []).length - 2}</span>
@@ -1209,8 +1264,8 @@ export default function MoodboardGenerator() {
 
                   {/* Pin indicator */}
                   {aw.pinned && (
-                    <div className="absolute left-1.5 top-1.5 rounded-full bg-white/80 p-1 shadow-sm">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-neutral-600">
+                    <div className="absolute left-1.5 top-1.5 rounded-full bg-white/80 dark:bg-neutral-800/80 p-1 shadow-sm">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-neutral-600 dark:text-neutral-300">
                         <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
                       </svg>
                     </div>
@@ -1220,7 +1275,7 @@ export default function MoodboardGenerator() {
                   <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={(e) => { e.stopPropagation(); togglePinArtwork(aw); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-500 shadow-sm hover:text-neutral-700"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
                       aria-label={aw.pinned ? 'Unpin' : 'Pin'}
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill={aw.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5">
@@ -1229,7 +1284,7 @@ export default function MoodboardGenerator() {
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); duplicateArtwork(aw); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-500 shadow-sm hover:text-neutral-700"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
                       aria-label="Duplicate"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1238,7 +1293,7 @@ export default function MoodboardGenerator() {
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); confirmDeleteArtwork(aw.id); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-400 shadow-sm hover:text-red-500"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-400 shadow-sm hover:text-red-500 dark:hover:text-red-400"
                       aria-label="Delete artwork"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -1259,13 +1314,13 @@ export default function MoodboardGenerator() {
 
       {/* Delete confirmation dialog */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setDeleteConfirmId(null)}>
-          <div className="mx-4 w-full max-w-xs rounded-lg bg-white p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm text-neutral-700">Delete this moodboard?</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 dark:bg-black/50" onClick={() => setDeleteConfirmId(null)}>
+          <div className="mx-4 w-full max-w-xs rounded-lg bg-white dark:bg-neutral-800 p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm text-neutral-700 dark:text-neutral-200">Delete this moodboard?</p>
             <p className="mt-1 text-[11px] text-neutral-400">This action cannot be undone.</p>
             <div className="mt-4 flex justify-end gap-3">
-              <button onClick={() => setDeleteConfirmId(null)} className="rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700">Cancel</button>
-              <button onClick={() => handleDeleteArtwork(deleteConfirmId)} className="rounded-md bg-red-50 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100">Delete</button>
+              <button onClick={() => setDeleteConfirmId(null)} className="rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">Cancel</button>
+              <button onClick={() => handleDeleteArtwork(deleteConfirmId)} className="rounded-md bg-red-50 dark:bg-red-900/30 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50">Delete</button>
             </div>
           </div>
         </div>

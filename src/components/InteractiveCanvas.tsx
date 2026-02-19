@@ -15,8 +15,8 @@ interface Props {
 
 function PinIndicator() {
   return (
-    <div className="absolute right-1 top-1 rounded-full bg-white/80 p-[3px] shadow-sm">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-neutral-500">
+    <div className="absolute right-1 top-1 rounded-full bg-white/80 dark:bg-neutral-800/80 p-[3px] shadow-sm">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-neutral-500 dark:text-neutral-400">
         <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
       </svg>
     </div>
@@ -27,7 +27,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${on ? 'bg-neutral-700' : 'bg-neutral-300'}`}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${on ? 'bg-neutral-700 dark:bg-neutral-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
       aria-label={on ? 'Unpin' : 'Pin'}
     >
       <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
@@ -192,7 +192,7 @@ export default function InteractiveCanvas({
           }}
         >
           <div
-            className={`pointer-events-auto absolute left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-2 py-1 shadow-md ${
+            className={`pointer-events-auto absolute left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white dark:bg-neutral-800 px-2 py-1 shadow-md ${
               nearTop ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
             }`}
             onPointerDown={(e) => e.stopPropagation()}
@@ -201,7 +201,7 @@ export default function InteractiveCanvas({
             <button
               onClick={() => resize(selected.id, 0.85)}
               disabled={selected.pinned}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-700 dark:hover:text-neutral-300 disabled:opacity-30"
               aria-label="Smaller"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -213,7 +213,7 @@ export default function InteractiveCanvas({
             <button
               onClick={() => resize(selected.id, 1.18)}
               disabled={selected.pinned}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-700 dark:hover:text-neutral-300 disabled:opacity-30"
               aria-label="Larger"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -221,18 +221,18 @@ export default function InteractiveCanvas({
               </svg>
             </button>
 
-            <div className="h-4 w-px bg-neutral-200" />
+            <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
 
             {/* Pin toggle */}
-            <span className="text-[10px] text-neutral-500">{selected.pinned ? 'unpin' : 'pin'}</span>
+            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{selected.pinned ? 'unpin' : 'pin'}</span>
             <Toggle on={selected.pinned} onToggle={() => togglePin(selected.id)} />
 
-            <div className="h-4 w-px bg-neutral-200" />
+            <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
 
             {/* Delete */}
             <button
               onClick={() => remove(selected.id)}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-500"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400"
               aria-label="Remove"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
