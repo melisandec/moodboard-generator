@@ -298,6 +298,52 @@ Samples up to 8 canvas images at 6×6 pixels, quantizes to dominant color bucket
 
 Toggle adds a clean white border around each image. Display uses CSS `box-shadow`. Export renders `fillRect` borders at `max(2, canvasWidth * 0.003)` pixels.
 
+### Image Rotation Controls
+
+Per-image rotation via the floating toolbar. Two buttons (rotate left ↺, rotate right ↻) each apply ±15° increments. Rotation is persisted in the `CanvasImage.rotation` field and rendered via CSS `transform: rotate()`. Disabled when the image is pinned. Also available in batch mode for multi-selected images.
+
+### Pinch-to-Zoom Gesture
+
+Two-finger pinch gesture on mobile resizes selected images on the canvas. Uses native touch events (`touchstart`, `touchmove`, `touchend`) registered with `{ passive: false }` for `touchmove` to allow `preventDefault()`. The gesture:
+
+- Captures initial finger distance and selected images' original sizes on `touchstart` (2 fingers)
+- Scales proportionally based on distance ratio during `touchmove`
+- Commits undo snapshot on `touchend`
+- Cancels any active drag or long-press when pinch is detected
+- Works with both single and multi-selected images
+- Uses stable refs (`imagesRef`, `onChangeRef`, `onCommitRef`) to avoid stale closures in the touch effect
+
+### Multi-Select & Batch Operations
+
+Multiple images can be selected simultaneously for batch operations.
+
+**Selection methods:**
+
+- **Desktop**: Shift+click or Cmd+click to toggle images in/out of selection
+- **Mobile**: Long-press (400ms) to add an image to the existing selection. Haptic feedback via `navigator.vibrate(50)` on trigger. Movement >5px cancels the long-press (starts drag instead).
+- **Deselect**: Click canvas background, press Escape, or click "Clear" in batch toolbar
+
+**Visual indicators:**
+
+- All selected images show the blue selection ring (`ring-2 ring-blue-400/50`)
+- Multi-selected images display a blue checkmark badge (top-left corner)
+
+**Batch toolbar** (floating, bottom-center of canvas, appears when 2+ images selected):
+
+- Count indicator ("{n} selected")
+- Batch resize (±) — skips pinned images
+- Batch rotate (±15°) — skips pinned images
+- Batch pin/unpin toggle
+- Batch delete
+- Clear selection button
+
+**Multi-drag**: When clicking an image that's already part of a multi-selection, all selected (unpinned) images drag together. Uses `origPositions` map for delta-based movement.
+
+**Keyboard shortcuts** (when images selected):
+
+- `Escape` — deselect all
+- `Delete` / `Backspace` — delete selected (batch or single)
+
 ### Templates
 
 5 built-in templates (Blank, Centered, Diagonal, Scattered, Corners) plus user-created templates. Bottom-sheet UI with SVG previews. Templates use relative coordinates for device-independent layouts.
@@ -943,7 +989,10 @@ All features are implemented and the project builds cleanly with no TypeScript e
 
 - Image upload with validation (4–20 images, JPEG/PNG/WebP/GIF)
 - Auto-generate collage with organic scatter algorithm
-- Interactive manual canvas (drag, resize, pin, delete, layer)
+- Interactive manual canvas (drag, resize, rotate, pin, delete, layer)
+- Pinch-to-zoom gesture for mobile image resize
+- Image rotation controls (±15° per tap, in single & batch toolbar)
+- Multi-select with batch operations (resize, rotate, pin, delete)
 - Canvas orientation toggle (portrait A4, landscape A4, square)
 - Memory-optimized undo/redo (50-step history, lightweight snapshots, keyboard shortcuts)
 - Background color picker with 5 presets + color extraction
@@ -1008,9 +1057,6 @@ All features are implemented and the project builds cleanly with no TypeScript e
 
 ### Not Yet Implemented
 
-- Pinch-to-zoom gesture for mobile resize (uses +/- buttons)
-- Image rotation controls (manual rotation UI)
-- Multi-select / batch operations on canvas
 - Canvas zoom/pan for detailed work
 - Client-side encryption for private moodboards
 - Data export (JSON + images ZIP)
