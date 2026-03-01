@@ -29,7 +29,7 @@ export async function PATCH(
 
     // Only the owner can toggle visibility
     const board = await db
-      .select({ id: moodboards.id })
+      .select({ id: moodboards.id, publishedAt: moodboards.publishedAt })
       .from(moodboards)
       .where(and(eq(moodboards.id, boardId), eq(moodboards.fid, fid)))
       .get();
@@ -41,9 +41,14 @@ export async function PATCH(
       );
     }
 
+    const now = new Date();
+    // Set publishedAt on first publish (private→public, no prior publishedAt)
+    const publishedAt =
+      isPublic && !board.publishedAt ? now : board.publishedAt;
+
     await db
       .update(moodboards)
-      .set({ isPublic, updatedAt: new Date() })
+      .set({ isPublic, publishedAt, updatedAt: now })
       .where(eq(moodboards.id, boardId));
 
     return NextResponse.json({ ok: true });

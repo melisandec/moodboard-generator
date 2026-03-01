@@ -78,7 +78,10 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
 
         {/* Meta row */}
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-neutral-400">
-          <span>{timeAgo(board.updatedAt)}</span>
+          <span>
+            Published{" "}
+            {timeAgo(board.publishedAt ?? board.createdAt)}
+          </span>
           {board.viewCount > 0 && (
             <span className="flex items-center gap-0.5">
               <svg
