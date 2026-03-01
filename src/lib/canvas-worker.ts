@@ -134,14 +134,23 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     ctx.fillStyle = req.bgColor;
     ctx.fillRect(0, 0, w, h);
 
-    // Load all images as ImageBitmap (concurrently)
-    const bitmaps = await Promise.all(
+    // Load all images as ImageBitmap (concurrently, resilient to failures)
+    const bitmapResults = await Promise.allSettled(
       req.images.map((img) => createImageBitmap(img.blob)),
     );
 
-    // Sort by zIndex and draw
+    // Sort by zIndex and draw — skip images that failed to load
     const sorted = req.images
-      .map((img, i) => ({ ...img, bitmap: bitmaps[i] }))
+      .map((img, i) => ({
+        ...img,
+        bitmap:
+          bitmapResults[i].status === "fulfilled"
+            ? bitmapResults[i].value
+            : null,
+      }))
+      .filter(
+        (im): im is typeof im & { bitmap: ImageBitmap } => im.bitmap !== null,
+      )
       .sort((a, b) => a.zIndex - b.zIndex);
 
     const borderPx = req.margin
@@ -182,7 +191,7 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     }
 
     // Close bitmaps
-    for (const bm of bitmaps) bm.close();
+    for (const im of sorted) im.bitmap.close();
 
     // Convert to blob
     const quality =

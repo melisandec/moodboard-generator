@@ -313,8 +313,11 @@ export async function renderThumbnail(
   const w = Math.round(cw * scale);
   const h = Math.round(ch * scale);
 
-  const loaded = await Promise.all(
-    images.map((im) => loadImageFromUrl(im.dataUrl)),
+  // Use allSettled so one broken image doesn't kill the whole thumbnail
+  const results = await Promise.allSettled(
+    images.map((im) =>
+      im.dataUrl ? loadImageFromUrl(im.dataUrl) : Promise.reject("no dataUrl"),
+    ),
   );
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -324,7 +327,11 @@ export async function renderThumbnail(
   ctx.fillRect(0, 0, w, h);
 
   const sorted = images
-    .map((im, i) => ({ ...im, el: loaded[i] }))
+    .map((im, i) => ({
+      ...im,
+      el: results[i].status === "fulfilled" ? results[i].value : null,
+    }))
+    .filter((im): im is typeof im & { el: HTMLImageElement } => im.el !== null)
     .sort((a, b) => a.zIndex - b.zIndex);
 
   const borderPx = margin ? Math.max(1, w * 0.003) : 0;

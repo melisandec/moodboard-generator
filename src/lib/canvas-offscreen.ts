@@ -47,17 +47,23 @@ function getWorker(): Worker | null {
 // Data URL → Blob conversion (for transferring to worker)
 // ---------------------------------------------------------------------------
 
-function dataUrlToBlob(dataUrl: string): Blob {
-  const commaIdx = dataUrl.indexOf(",");
-  const header = dataUrl.substring(0, commaIdx);
-  const base64 = dataUrl.substring(commaIdx + 1);
-  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+  try {
+    const commaIdx = dataUrl.indexOf(",");
+    if (commaIdx < 0) return null;
+    const header = dataUrl.substring(0, commaIdx);
+    const base64 = dataUrl.substring(commaIdx + 1);
+    const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  } catch {
+    return null;
   }
-  return new Blob([bytes], { type: mime });
 }
 
 // ---------------------------------------------------------------------------
@@ -116,15 +122,22 @@ export async function renderMoodboardToBlobOffscreen(
       const scale = Math.min(1, 1200 / cw);
       const request: RenderRequest = {
         type: "renderToBlob",
-        images: images.map((img) => ({
-          blob: dataUrlToBlob(img.dataUrl),
-          x: img.x,
-          y: img.y,
-          width: img.width,
-          height: img.height,
-          rotation: img.rotation,
-          zIndex: img.zIndex,
-        })),
+        images: images
+          .map((img) => {
+            const blob = dataUrlToBlob(img.dataUrl);
+            return blob
+              ? {
+                  blob,
+                  x: img.x,
+                  y: img.y,
+                  width: img.width,
+                  height: img.height,
+                  rotation: img.rotation,
+                  zIndex: img.zIndex,
+                }
+              : null;
+          })
+          .filter((v): v is NonNullable<typeof v> => v !== null),
         canvasWidth: cw,
         canvasHeight: ch,
         bgColor,
@@ -161,15 +174,22 @@ export async function renderThumbnailOffscreen(
       const scale = Math.min(1, 200 / cw);
       const request: RenderRequest = {
         type: "renderThumbnail",
-        images: images.map((img) => ({
-          blob: dataUrlToBlob(img.dataUrl),
-          x: img.x,
-          y: img.y,
-          width: img.width,
-          height: img.height,
-          rotation: img.rotation,
-          zIndex: img.zIndex,
-        })),
+        images: images
+          .map((img) => {
+            const blob = dataUrlToBlob(img.dataUrl);
+            return blob
+              ? {
+                  blob,
+                  x: img.x,
+                  y: img.y,
+                  width: img.width,
+                  height: img.height,
+                  rotation: img.rotation,
+                  zIndex: img.zIndex,
+                }
+              : null;
+          })
+          .filter((v): v is NonNullable<typeof v> => v !== null),
         canvasWidth: cw,
         canvasHeight: ch,
         bgColor,
