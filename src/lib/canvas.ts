@@ -1,4 +1,4 @@
-import type { CanvasImage } from "./storage";
+import type { CanvasImage, EditHistoryEntry } from "./storage";
 
 interface Placement {
   img: HTMLImageElement;
@@ -43,6 +43,31 @@ function wrapText(
   return lines;
 }
 
+/**
+ * Format attribution string for canvas rendering and cast messages.
+ * Shows "Made by @creator + @remixer1 + @remixer2" format.
+ * If more than 4 usernames, shows "+N more".
+ */
+export function formatAttribution(
+  username?: string,
+  editHistory?: EditHistoryEntry[],
+): string {
+  if (editHistory && editHistory.length > 0) {
+    const usernames = editHistory.map((e) => `@${e.username}`);
+    const MAX_VISIBLE = 4;
+    if (usernames.length <= MAX_VISIBLE) {
+      return `Made by ${usernames.join(" + ")}`;
+    }
+    const visible = usernames.slice(0, MAX_VISIBLE);
+    const remaining = usernames.length - MAX_VISIBLE;
+    return `Made by ${visible.join(" + ")} +${remaining} more`;
+  }
+  if (username) {
+    return `Made by @${username}`;
+  }
+  return "";
+}
+
 function drawTitleCaption(
   ctx: CanvasRenderingContext2D,
   title: string,
@@ -51,13 +76,16 @@ function drawTitleCaption(
   height: number,
   darkBg: boolean,
   username?: string,
+  editHistory?: EditHistoryEntry[],
 ) {
   const pad = width * 0.045;
   const maxW = width - pad * 2;
   let y = height - pad * 0.5;
   const alpha = darkBg ? 0.7 : 1;
 
-  if (username) {
+  // Attribution chain (edit history takes priority over simple username)
+  const attributionText = formatAttribution(username, editHistory);
+  if (attributionText) {
     const sz = Math.round(width * 0.015);
     ctx.font = `300 ${sz}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
     ctx.fillStyle = darkBg
@@ -65,7 +93,7 @@ function drawTitleCaption(
       : "rgba(0,0,0,0.25)";
     ctx.textAlign = "left";
     ctx.textBaseline = "bottom";
-    ctx.fillText(`Made by @${username}`, pad, y);
+    ctx.fillText(attributionText, pad, y);
     y -= sz + 6;
   }
 
@@ -200,6 +228,7 @@ export function renderMoodboard(
   width = 1080,
   height = 1350,
   username?: string,
+  editHistory?: EditHistoryEntry[],
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -232,7 +261,16 @@ export function renderMoodboard(
     ctx.drawImage(p.img, -p.width / 2, -p.height / 2, p.width, p.height);
     ctx.restore();
   }
-  drawTitleCaption(ctx, title, caption, width, height, false, username);
+  drawTitleCaption(
+    ctx,
+    title,
+    caption,
+    width,
+    height,
+    false,
+    username,
+    editHistory,
+  );
   return canvas.toDataURL("image/png");
 }
 
@@ -433,6 +471,7 @@ export async function renderManualMoodboard(
   ch: number,
   bgColor = "#f5f5f4",
   margin = false,
+  editHistory?: EditHistoryEntry[],
 ): Promise<string> {
   const loaded = await Promise.all(
     images.map((im) => loadImageFromUrl(im.dataUrl)),
@@ -467,7 +506,16 @@ export async function renderManualMoodboard(
     ctx.restore();
   }
 
-  drawTitleCaption(ctx, title, caption, cw, ch, isDark(bgColor));
+  drawTitleCaption(
+    ctx,
+    title,
+    caption,
+    cw,
+    ch,
+    isDark(bgColor),
+    undefined,
+    editHistory,
+  );
   return canvas.toDataURL("image/png");
 }
 
@@ -481,6 +529,7 @@ export async function renderMoodboardToBlob(
   margin = false,
   quality = 0.85,
   username?: string,
+  editHistory?: EditHistoryEntry[],
 ): Promise<Blob> {
   const scale = Math.min(1, 1200 / cw);
   const w = Math.round(cw * scale);
@@ -523,7 +572,16 @@ export async function renderMoodboardToBlob(
     ctx.restore();
   }
 
-  drawTitleCaption(ctx, title, caption, w, h, isDark(bgColor), username);
+  drawTitleCaption(
+    ctx,
+    title,
+    caption,
+    w,
+    h,
+    isDark(bgColor),
+    username,
+    editHistory,
+  );
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(

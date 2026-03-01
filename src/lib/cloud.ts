@@ -1,6 +1,6 @@
-import type { Artwork, CanvasImage } from './storage';
-import { imageHash } from './storage';
-import { compressForUpload } from './canvas';
+import type { Artwork, CanvasImage, EditHistoryEntry } from "./storage";
+import { imageHash } from "./storage";
+import { compressForUpload } from "./canvas";
 
 export interface CloudUser {
   fid: string;
@@ -8,7 +8,7 @@ export interface CloudUser {
   pfpUrl: string;
 }
 
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+export type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
 
 type FetchFn = typeof fetch;
 
@@ -40,28 +40,37 @@ async function runConcurrent<T>(
       const i = idx++;
       try {
         const value = await tasks[i]();
-        results[i] = { status: 'fulfilled', value };
+        results[i] = { status: "fulfilled", value };
       } catch (reason) {
-        results[i] = { status: 'rejected', reason };
+        results[i] = { status: "rejected", reason };
       }
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()),
+  );
   return results;
 }
 
 // ---------------------------------------------------------------------------
 
-export async function registerUser(user: CloudUser, fetchFn: FetchFn): Promise<void> {
-  const res = await fetchFn('/api/user', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function registerUser(
+  user: CloudUser,
+  fetchFn: FetchFn,
+): Promise<void> {
+  const res = await fetchFn("/api/user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: user.username, pfpUrl: user.pfpUrl }),
   });
   if (!res.ok) {
-    console.error('registerUser failed:', res.status, await res.text().catch(() => ''));
-    throw new Error('Failed to register user');
+    console.error(
+      "registerUser failed:",
+      res.status,
+      await res.text().catch(() => ""),
+    );
+    throw new Error("Failed to register user");
   }
 }
 
@@ -76,18 +85,22 @@ async function uploadImage(
   const blob = await compressForUpload(dataUrl);
 
   const formData = new FormData();
-  formData.append('file', blob, filename || `image-${hash}.jpg`);
-  formData.append('hash', hash);
-  formData.append('naturalWidth', String(naturalWidth));
-  formData.append('naturalHeight', String(naturalHeight));
+  formData.append("file", blob, filename || `image-${hash}.jpg`);
+  formData.append("hash", hash);
+  formData.append("naturalWidth", String(naturalWidth));
+  formData.append("naturalHeight", String(naturalHeight));
 
-  const res = await fetchFn('/api/images/upload', {
-    method: 'POST',
+  const res = await fetchFn("/api/images/upload", {
+    method: "POST",
     body: formData,
   });
   if (!res.ok) {
-    console.error('uploadImage failed:', res.status, await res.text().catch(() => ''));
-    throw new Error('Image upload failed');
+    console.error(
+      "uploadImage failed:",
+      res.status,
+      await res.text().catch(() => ""),
+    );
+    throw new Error("Image upload failed");
   }
   const { url } = await res.json();
   return url;
@@ -125,12 +138,19 @@ export async function pushToCloud(
   if (toPush.length === 0) return;
 
   // Collect unique images across all boards being pushed
-  const uniqueImages = new Map<string, { dataUrl: string; nw: number; nh: number }>();
+  const uniqueImages = new Map<
+    string,
+    { dataUrl: string; nw: number; nh: number }
+  >();
   for (const aw of toPush) {
     for (const img of aw.images) {
       const hash = imageHash(img.dataUrl);
       if (!uniqueImages.has(hash)) {
-        uniqueImages.set(hash, { dataUrl: img.dataUrl, nw: img.naturalWidth, nh: img.naturalHeight });
+        uniqueImages.set(hash, {
+          dataUrl: img.dataUrl,
+          nw: img.naturalWidth,
+          nh: img.naturalHeight,
+        });
       }
     }
   }
@@ -138,7 +158,8 @@ export async function pushToCloud(
   // Upload images in parallel (max concurrency)
   const uploadTasks = [...uniqueImages.entries()].map(
     ([hash, { dataUrl, nw, nh }]) =>
-      () => uploadImage(dataUrl, hash, `image-${hash}`, nw, nh, fetchFn),
+      () =>
+        uploadImage(dataUrl, hash, `image-${hash}`, nw, nh, fetchFn),
   );
   await runConcurrent(uploadTasks);
 
@@ -154,19 +175,26 @@ export async function pushToCloud(
     orientation: aw.orientation,
     margin: aw.imageMargin,
     pinned: aw.pinned,
+    isPublic: aw.isPublic ?? false,
+    editHistory: aw.editHistory ?? [],
+    remixOfId: aw.remixOfId ?? null,
     createdAt: aw.createdAt,
     updatedAt: aw.updatedAt,
     syncVersion: 1,
   }));
 
-  const res = await fetchFn('/api/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetchFn("/api/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ boards }),
   });
   if (!res.ok) {
-    console.error('pushToCloud failed:', res.status, await res.text().catch(() => ''));
-    throw new Error('Sync push failed');
+    console.error(
+      "pushToCloud failed:",
+      res.status,
+      await res.text().catch(() => ""),
+    );
+    throw new Error("Sync push failed");
   }
 }
 
@@ -186,21 +214,41 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
 }
 
 export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
-  const res = await fetchFn('/api/sync');
+  const res = await fetchFn("/api/sync");
   if (!res.ok) {
-    console.error('pullFromCloud failed:', res.status, await res.text().catch(() => ''));
-    throw new Error('Sync pull failed');
+    console.error(
+      "pullFromCloud failed:",
+      res.status,
+      await res.text().catch(() => ""),
+    );
+    throw new Error("Sync pull failed");
   }
 
-  const { boards, imageMap } = await res.json() as {
+  const { boards, imageMap } = (await res.json()) as {
     boards: Array<{
-      id: string; title: string; caption: string;
-      categories: string[]; canvasState: CloudCanvasImage[];
-      canvasWidth: number; canvasHeight: number;
-      background: string; orientation: string; margin: boolean;
-      pinned: boolean; createdAt: string | number; updatedAt: string | number;
+      id: string;
+      title: string;
+      caption: string;
+      categories: string[];
+      canvasState: CloudCanvasImage[];
+      canvasWidth: number;
+      canvasHeight: number;
+      background: string;
+      orientation: string;
+      margin: boolean;
+      pinned: boolean;
+      createdAt: string | number;
+      updatedAt: string | number;
+      isPublic?: boolean;
+      editHistory?: EditHistoryEntry[];
+      viewCount?: number;
+      editCount?: number;
+      remixOfId?: string;
     }>;
-    imageMap: Record<string, { url: string; naturalWidth: number; naturalHeight: number }>;
+    imageMap: Record<
+      string,
+      { url: string; naturalWidth: number; naturalHeight: number }
+    >;
   };
 
   // Pre-fetch all unique images in parallel
@@ -212,17 +260,15 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
   }
 
   const dataUrlCache = new Map<string, string>();
-  const fetchTasks = [...uniqueHashes].map(
-    (hash) => async () => {
-      const url = imageMap[hash].url;
-      const dataUrl = await fetchImageAsDataUrl(url);
-      dataUrlCache.set(hash, dataUrl);
-    },
-  );
+  const fetchTasks = [...uniqueHashes].map((hash) => async () => {
+    const url = imageMap[hash].url;
+    const dataUrl = await fetchImageAsDataUrl(url);
+    dataUrlCache.set(hash, dataUrl);
+  });
   await runConcurrent(fetchTasks);
 
   const toIso = (v: string | number) =>
-    typeof v === 'string' ? v : new Date(v).toISOString();
+    typeof v === "string" ? v : new Date(v).toISOString();
 
   return boards.map((board) => {
     const canvasImages: CanvasImage[] = board.canvasState
@@ -244,17 +290,127 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
     return {
       id: board.id,
       title: board.title,
-      caption: board.caption ?? '',
+      caption: board.caption ?? "",
       images: canvasImages,
       canvasWidth: board.canvasWidth,
       canvasHeight: board.canvasHeight,
-      orientation: (board.orientation as Artwork['orientation']) ?? 'portrait',
-      bgColor: board.background ?? '#f5f5f4',
+      orientation: (board.orientation as Artwork["orientation"]) ?? "portrait",
+      bgColor: board.background ?? "#f5f5f4",
       imageMargin: board.margin ?? false,
       categories: board.categories ?? [],
       pinned: board.pinned ?? false,
+      isPublic: board.isPublic ?? false,
+      editHistory: board.editHistory ?? [],
+      viewCount: board.viewCount ?? 0,
+      editCount: board.editCount ?? 0,
+      remixOfId: board.remixOfId,
       createdAt: toIso(board.createdAt),
       updatedAt: toIso(board.updatedAt),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Public Feed API helpers
+// ---------------------------------------------------------------------------
+
+export interface PublicBoardSummary {
+  id: string;
+  title: string;
+  caption: string;
+  categories: string[];
+  thumbnailUrl: string | null;
+  creatorFid: string;
+  creatorUsername: string;
+  creatorPfpUrl: string;
+  editHistory: EditHistoryEntry[];
+  viewCount: number;
+  editCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBoardDetail extends PublicBoardSummary {
+  canvasState: CloudCanvasImage[];
+  canvasWidth: number;
+  canvasHeight: number;
+  background: string;
+  orientation: string;
+  margin: boolean;
+  imageMap: Record<
+    string,
+    { url: string; naturalWidth: number; naturalHeight: number }
+  >;
+  remixOfId?: string;
+}
+
+export type FeedSortBy = "newest" | "trending" | "most_viewed";
+
+export async function fetchPublicBoards(
+  fetchFn: FetchFn,
+  options: {
+    limit?: number;
+    offset?: number;
+    sortBy?: FeedSortBy;
+    search?: string;
+  } = {},
+): Promise<{ boards: PublicBoardSummary[]; total: number }> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  if (options.sortBy) params.set("sortBy", options.sortBy);
+  if (options.search) params.set("search", options.search);
+
+  const res = await fetchFn(`/api/boards/public?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch public boards");
+  }
+  return res.json();
+}
+
+export async function fetchPublicBoardDetail(
+  fetchFn: FetchFn,
+  boardId: string,
+): Promise<PublicBoardDetail> {
+  const res = await fetchFn(`/api/boards/${boardId}/public`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch board detail");
+  }
+  return res.json();
+}
+
+export async function incrementViewCount(
+  fetchFn: FetchFn,
+  boardId: string,
+): Promise<void> {
+  await fetchFn(`/api/boards/${boardId}/view`, { method: "POST" });
+}
+
+export async function remixBoard(
+  fetchFn: FetchFn,
+  boardId: string,
+): Promise<{ newBoardId: string }> {
+  const res = await fetchFn(`/api/boards/${boardId}/remix`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to remix board");
+  }
+  return res.json();
+}
+
+export async function toggleBoardVisibility(
+  fetchFn: FetchFn,
+  boardId: string,
+  isPublic: boolean,
+): Promise<void> {
+  const res = await fetchFn(`/api/boards/${boardId}/visibility`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isPublic }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to toggle visibility");
+  }
 }

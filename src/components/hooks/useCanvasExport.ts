@@ -1,8 +1,16 @@
 import { useState, useCallback } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { renderManualMoodboard, renderMoodboardToBlob } from "@/lib/canvas";
+import {
+  renderManualMoodboard,
+  renderMoodboardToBlob,
+  formatAttribution,
+} from "@/lib/canvas";
 import { renderMoodboardToBlobOffscreen } from "@/lib/canvas-offscreen";
-import { clearDraft, type CanvasImage } from "@/lib/storage";
+import {
+  clearDraft,
+  type CanvasImage,
+  type EditHistoryEntry,
+} from "@/lib/storage";
 
 interface ExportConfig {
   title: string;
@@ -15,6 +23,7 @@ interface ExportConfig {
   imageMargin: boolean;
   moodboardUrl: string | null;
   username?: string;
+  editHistory?: EditHistoryEntry[];
 }
 
 /**
@@ -32,6 +41,7 @@ export function useCanvasExport(config: ExportConfig) {
     imageMargin,
     moodboardUrl,
     username,
+    editHistory,
   } = config;
   const [castStatus, setCastStatus] = useState<string | null>(null);
 
@@ -77,10 +87,10 @@ export function useCanvasExport(config: ExportConfig) {
   const castToFarcaster = useCallback(async () => {
     const trimmedTitle = title.trim() || "Untitled";
     const trimmedCaption = caption.trim();
-    const byLine = username ? `by @${username}` : "";
+    const attribution = formatAttribution(username, editHistory);
     let text = `Moodboard: \u201c${trimmedTitle}\u201d`;
     if (trimmedCaption) text += ` ${trimmedCaption}`;
-    if (byLine) text += ` ${byLine}`;
+    if (attribution) text += ` ${attribution}`;
     text += `\n\nGenerate yours on Moodboard Generator \u2726 https://farcaster.xyz/miniapps/x1EOQs0RVPn5/moodboard-generator`;
 
     setCastStatus("Rendering image…");
@@ -111,6 +121,7 @@ export function useCanvasExport(config: ExportConfig) {
               imageMargin,
               0.85,
               username,
+              editHistory,
             ),
         );
       } else if (moodboardUrl) {
@@ -171,6 +182,7 @@ export function useCanvasExport(config: ExportConfig) {
     title,
     caption,
     username,
+    editHistory,
     view,
     canvasImages,
     dimsW,
@@ -196,6 +208,7 @@ export function useCanvasExport(config: ExportConfig) {
       dimsH,
       bgColor,
       imageMargin,
+      editHistory,
     );
     saveImage(url);
     clearDraft().catch(() => {});
@@ -207,6 +220,7 @@ export function useCanvasExport(config: ExportConfig) {
     dimsH,
     bgColor,
     imageMargin,
+    editHistory,
     saveImage,
   ]);
 
@@ -219,6 +233,7 @@ export function useCanvasExport(config: ExportConfig) {
       dimsH,
       bgColor,
       imageMargin,
+      editHistory,
     );
     printUrl(url);
   }, [
@@ -229,6 +244,7 @@ export function useCanvasExport(config: ExportConfig) {
     dimsH,
     bgColor,
     imageMargin,
+    editHistory,
     printUrl,
   ]);
 

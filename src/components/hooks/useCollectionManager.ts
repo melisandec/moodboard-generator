@@ -7,6 +7,7 @@ import {
   type Artwork,
   type CanvasImage,
   type Orientation,
+  type EditHistoryEntry,
 } from "@/lib/storage";
 import { renderThumbnail } from "@/lib/canvas";
 import { renderThumbnailOffscreen } from "@/lib/canvas-offscreen";
@@ -37,6 +38,9 @@ interface ArtworkSetters {
   setView: (v: "create" | "auto-result" | "manual" | "library") => void;
   clearHistory: () => void;
   setExtractedColors: (c: string[]) => void;
+  setIsPublic: (v: boolean) => void;
+  setEditHistory: (h: EditHistoryEntry[]) => void;
+  setRemixOfId: (id: string | undefined) => void;
 }
 
 interface SaveContext {
@@ -50,6 +54,9 @@ interface SaveContext {
   bgColor: string;
   imageMargin: boolean;
   categories: string[];
+  isPublic: boolean;
+  editHistory: EditHistoryEntry[];
+  remixOfId?: string;
 }
 
 /**
@@ -97,83 +104,88 @@ export function useCollectionManager(
   }, [syncStatus, refreshCollection]);
 
   // ---- Save to collection ----
-  const saveToCollection = useCallback(async () => {
-    const {
-      artworkId,
-      title,
-      caption,
-      canvasImages,
-      dimsW,
-      dimsH,
-      orientation,
-      bgColor,
-      imageMargin,
-      categories,
-    } = saveCtx;
-    const now = new Date().toISOString();
-    const id =
-      artworkId ??
-      `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    let createdAt = now;
-    if (artworkId) {
-      const ex = savedArtworks.find((a) => a.id === artworkId);
-      if (ex) createdAt = ex.createdAt;
-    }
-
-    let thumbnail: string | undefined;
-    try {
-      console.log(
-        `[saveToCollection] Generating thumbnail with ${canvasImages.length} images`,
-      );
-      thumbnail = await renderThumbnailOffscreen(
+  const saveToCollection = useCallback(
+    async (forceIsPublic?: boolean) => {
+      const {
+        artworkId,
+        title,
+        caption,
         canvasImages,
         dimsW,
         dimsH,
+        orientation,
         bgColor,
         imageMargin,
-        () => renderThumbnail(canvasImages, dimsW, dimsH, bgColor, imageMargin),
-      );
-      console.log(
-        `[saveToCollection] Thumbnail result length: ${thumbnail?.length || 0}`,
-      );
-    } catch (err) {
-      console.error(`[saveToCollection] Thumbnail generation failed:`, err);
-      /* non-critical */
-    }
+        categories,
+        isPublic,
+        editHistory,
+        remixOfId,
+      } = saveCtx;
+      const now = new Date().toISOString();
+      const id =
+        artworkId ??
+        `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      let createdAt = now;
+      if (artworkId) {
+        const ex = savedArtworks.find((a) => a.id === artworkId);
+        if (ex) createdAt = ex.createdAt;
+      }
 
-    await saveArtwork({
-      id,
-      title: title.trim() || "Untitled",
-      caption: caption.trim(),
-      images: canvasImages,
-      canvasWidth: dimsW,
-      canvasHeight: dimsH,
-      orientation,
-      bgColor,
-      imageMargin,
-      categories,
-      thumbnail,
-      pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
-      createdAt,
-      updatedAt: now,
-    });
-    setters.setArtworkId(id);
-    setSaveMsg("Saved");
-    setTimeout(() => setSaveMsg(null), 1500);
-    refreshCollection();
-    clearDraft().catch(() => {});
-    if (cloudUser)
-      cloudSync()
-        .then(() => refreshCollection())
-        .catch(() => {});
-  }, [
-    saveCtx,
-    savedArtworks,
-    setters,
-    refreshCollection,
-    cloudUser,
-    cloudSync,
-  ]);
+      let thumbnail: string | undefined;
+      try {
+        console.log(
+          `[saveToCollection] Generating thumbnail with ${canvasImages.length} images`,
+        );
+        thumbnail = await renderThumbnailOffscreen(
+          canvasImages,
+          dimsW,
+          dimsH,
+          bgColor,
+          imageMargin,
+          () =>
+            renderThumbnail(canvasImages, dimsW, dimsH, bgColor, imageMargin),
+        );
+        console.log(
+          `[saveToCollection] Thumbnail result length: ${thumbnail?.length || 0}`,
+        );
+      } catch (err) {
+        console.error(`[saveToCollection] Thumbnail generation failed:`, err);
+        /* non-critical */
+      }
+
+      await saveArtwork({
+        id,
+        title: title.trim() || "Untitled",
+        caption: caption.trim(),
+        images: canvasImages,
+        canvasWidth: dimsW,
+        canvasHeight: dimsH,
+        orientation,
+        bgColor,
+        imageMargin,
+        categories,
+        thumbnail,
+        pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
+        isPublic: forceIsPublic ?? isPublic,
+        editHistory: editHistory ?? [],
+        viewCount: savedArtworks.find((a) => a.id === id)?.viewCount ?? 0,
+        editCount: savedArtworks.find((a) => a.id === id)?.editCount ?? 0,
+        remixOfId,
+        createdAt,
+        updatedAt: now,
+      });
+      setters.setArtworkId(id);
+      setSaveMsg("Saved");
+      setTimeout(() => setSaveMsg(null), 1500);
+      refreshCollection();
+      clearDraft().catch(() => {});
+      if (cloudUser)
+        cloudSync()
+          .then(() => refreshCollection())
+          .catch(() => {});
+    },
+    [saveCtx, savedArtworks, setters, refreshCollection, cloudUser, cloudSync],
+  );
 
   // ---- Delete ----
   const confirmDeleteArtwork = useCallback((id: string) => {
@@ -196,6 +208,24 @@ export function useCollectionManager(
     [refreshCollection],
   );
 
+  // ---- Toggle visibility ----
+  const toggleVisibility = useCallback(
+    async (aw: Artwork) => {
+      const updated = {
+        ...aw,
+        isPublic: !aw.isPublic,
+        updatedAt: new Date().toISOString(),
+      };
+      await saveArtwork(updated);
+      refreshCollection();
+      if (cloudUser)
+        cloudSync()
+          .then(() => refreshCollection())
+          .catch(() => {});
+    },
+    [refreshCollection, cloudUser, cloudSync],
+  );
+
   // ---- Load for editing ----
   const loadArtworkForEditing = useCallback(
     (aw: Artwork) => {
@@ -214,6 +244,9 @@ export function useCollectionManager(
       setters.setBgColor(aw.bgColor ?? "#f5f5f4");
       setters.setImageMargin(aw.imageMargin ?? false);
       setters.setCategories(aw.categories ?? []);
+      setters.setIsPublic(aw.isPublic ?? false);
+      setters.setEditHistory(aw.editHistory ?? []);
+      setters.setRemixOfId(aw.remixOfId);
       setters.clearHistory();
       setters.setExtractedColors([]);
       setters.setView("manual");
@@ -244,6 +277,9 @@ export function useCollectionManager(
       setters.setBgColor(aw.bgColor ?? "#f5f5f4");
       setters.setImageMargin(aw.imageMargin ?? false);
       setters.setCategories(aw.categories ?? []);
+      setters.setIsPublic(false);
+      setters.setEditHistory(aw.editHistory ?? []);
+      setters.setRemixOfId(undefined);
       setters.clearHistory();
       setters.setView("manual");
     },
@@ -311,6 +347,7 @@ export function useCollectionManager(
     confirmDeleteArtwork,
     handleDeleteArtwork,
     togglePinArtwork,
+    toggleVisibility,
     loadArtworkForEditing,
     duplicateArtwork,
   };

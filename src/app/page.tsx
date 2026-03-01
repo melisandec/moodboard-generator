@@ -1,5 +1,10 @@
-import MoodboardGenerator from '@/components/MoodboardGenerator';
+import { Suspense } from "react";
+import MoodboardGenerator from "@/components/MoodboardGenerator";
 
 export default function Home() {
-  return <MoodboardGenerator />;
+  return (
+    <Suspense>
+      <MoodboardGenerator />
+    </Suspense>
+  );
 }

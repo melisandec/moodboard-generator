@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { extractColors } from "@/lib/canvas";
 import {
@@ -297,6 +298,7 @@ function ActionBar({
 // ---------------------------------------------------------------------------
 
 export default function MoodboardGenerator() {
+  const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [view, setView] = useState<View>("create");
@@ -314,6 +316,13 @@ export default function MoodboardGenerator() {
   const [processedData, setProcessedData] = useState<
     Array<{ dataUrl: string; naturalWidth: number; naturalHeight: number }>
   >([]);
+
+  // Visibility & remix
+  const [isPublic, setIsPublic] = useState(false);
+  const [editHistory, setEditHistory] = useState<
+    import("@/lib/storage").EditHistoryEntry[]
+  >([]);
+  const [remixOfId, setRemixOfId] = useState<string | undefined>(undefined);
 
   // Categories
   const [categories, setCategories] = useState<string[]>([]);
@@ -374,6 +383,7 @@ export default function MoodboardGenerator() {
     imageMargin,
     moodboardUrl,
     username: cloudUser?.username,
+    editHistory,
   });
 
   const collectionSetters = useMemo(
@@ -390,6 +400,9 @@ export default function MoodboardGenerator() {
       setView,
       clearHistory,
       setExtractedColors,
+      setIsPublic,
+      setEditHistory,
+      setRemixOfId,
     }),
     [clearHistory],
   );
@@ -406,6 +419,9 @@ export default function MoodboardGenerator() {
       bgColor,
       imageMargin,
       categories,
+      isPublic,
+      editHistory,
+      remixOfId,
     }),
     [
       artworkId,
@@ -418,6 +434,9 @@ export default function MoodboardGenerator() {
       bgColor,
       imageMargin,
       categories,
+      isPublic,
+      editHistory,
+      remixOfId,
     ],
   );
 
@@ -439,6 +458,7 @@ export default function MoodboardGenerator() {
     confirmDeleteArtwork,
     handleDeleteArtwork,
     togglePinArtwork,
+    toggleVisibility,
     loadArtworkForEditing,
     duplicateArtwork,
   } = useCollectionManager(
@@ -539,6 +559,56 @@ export default function MoodboardGenerator() {
       );
     }
   }, [customCategories]);
+
+  // Handle remix from URL (?remix=boardId)
+  const remixHandled = useRef(false);
+  useEffect(() => {
+    const remixId = searchParams.get("remix");
+    if (!remixId || !cloudUser || remixHandled.current) return;
+    remixHandled.current = true;
+
+    (async () => {
+      try {
+        setIsProcessing(true);
+
+        // Use sdk quickAuth for authenticated remix call
+        let res: Response;
+        const inMiniApp = await sdk.isInMiniApp().catch(() => false);
+        if (inMiniApp) {
+          res = await sdk.quickAuth.fetch(`/api/boards/${remixId}/remix`, {
+            method: "POST",
+          });
+        } else {
+          const { token } = await sdk.quickAuth
+            .getToken()
+            .catch(() => ({ token: null }));
+          const headers: Record<string, string> = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          res = await fetch(`/api/boards/${remixId}/remix`, {
+            method: "POST",
+            headers,
+          });
+        }
+
+        if (!res.ok) throw new Error("Remix failed");
+        const { newBoardId } = await res.json();
+
+        // Sync to get the new board locally, then load it
+        const synced = await cloudSync();
+        const newBoard = synced.find((a) => a.id === newBoardId);
+        if (newBoard) {
+          loadArtworkForEditing(newBoard);
+        }
+
+        // Clean up the URL
+        window.history.replaceState({}, "", "/");
+      } catch (err) {
+        console.error("Remix from URL failed:", err);
+      } finally {
+        setIsProcessing(false);
+      }
+    })();
+  }, [searchParams, cloudUser, cloudSync, loadArtworkForEditing]);
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -764,7 +834,54 @@ export default function MoodboardGenerator() {
               </span>
             )}
             <button
-              onClick={saveToCollection}
+              onClick={async () => {
+                const next = !isPublic;
+                setIsPublic(next);
+                await saveToCollection(next);
+              }}
+              className={`flex min-h-[44px] items-center gap-1 rounded-full border px-2.5 text-[11px] transition-colors ${
+                isPublic
+                  ? "border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                  : "border-neutral-300 dark:border-neutral-600 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              }`}
+              aria-label={isPublic ? "Set Private" : "Set Public"}
+            >
+              {isPublic ? (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+              ) : (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              )}
+              {isPublic ? "Public" : "Private"}
+            </button>
+            <button
+              onClick={() => {
+                void saveToCollection();
+              }}
               className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-3 text-[11px] text-neutral-600 dark:text-neutral-300 hover:border-neutral-500"
             >
               Save
@@ -953,6 +1070,15 @@ export default function MoodboardGenerator() {
                 className="w-12 border-b border-neutral-200 dark:border-neutral-700 bg-transparent text-center text-[10px] text-neutral-700 dark:text-neutral-300 outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:border-neutral-400"
               />
             </div>
+          </div>
+        )}
+
+        {/* Remix attribution indicator */}
+        {remixOfId && editHistory.length > 0 && (
+          <div className="flex items-center gap-2 px-4 pb-2">
+            <span className="text-[10px] text-blue-500 dark:text-blue-400">
+              🔀 Remixed from @{editHistory[0]?.username || "unknown"}
+            </span>
           </div>
         )}
 
@@ -1174,6 +1300,12 @@ export default function MoodboardGenerator() {
             >
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
+            <a
+              href="/feed"
+              className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            >
+              Feed
+            </a>
             <button
               onClick={() => setView("library")}
               className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
@@ -1458,8 +1590,68 @@ export default function MoodboardGenerator() {
                     </div>
                   )}
 
+                  {/* Public badge */}
+                  {aw.isPublic && (
+                    <div
+                      className="absolute left-1.5 rounded-full bg-blue-500/90 p-1 shadow-sm"
+                      style={{ top: aw.pinned ? "2rem" : "0.375rem" }}
+                    >
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                      </svg>
+                    </div>
+                  )}
+
                   {/* Hover actions */}
                   <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleVisibility(aw);
+                      }}
+                      className={`flex h-7 w-7 items-center justify-center rounded-full shadow-sm ${aw.isPublic ? "bg-blue-50 dark:bg-blue-900/40 text-blue-500" : "bg-white/90 dark:bg-neutral-800/90 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"}`}
+                      aria-label={aw.isPublic ? "Make private" : "Make public"}
+                    >
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        {aw.isPublic ? (
+                          <>
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                          </>
+                        ) : (
+                          <>
+                            <rect
+                              x="3"
+                              y="11"
+                              width="18"
+                              height="11"
+                              rx="2"
+                              ry="2"
+                            />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </>
+                        )}
+                      </svg>
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

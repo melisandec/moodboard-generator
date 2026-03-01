@@ -30,6 +30,12 @@ export function rehydrateImages(
 
 export type Orientation = "portrait" | "landscape" | "square";
 
+export interface EditHistoryEntry {
+  fid: string;
+  username: string;
+  editedAt: string;
+}
+
 export interface Artwork {
   id: string;
   title: string;
@@ -42,6 +48,11 @@ export interface Artwork {
   imageMargin: boolean;
   categories: string[];
   pinned: boolean;
+  isPublic: boolean;
+  editHistory: EditHistoryEntry[];
+  viewCount: number;
+  editCount: number;
+  remixOfId?: string;
   createdAt: string;
   updatedAt: string;
   /** Small JPEG data URL for collection grid preview */
