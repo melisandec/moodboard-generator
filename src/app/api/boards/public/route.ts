@@ -58,6 +58,7 @@ export async function GET(req: Request) {
         editHistory: moodboards.editHistory,
         viewCount: moodboards.viewCount,
         editCount: moodboards.editCount,
+        publishedAt: moodboards.publishedAt,
         createdAt: moodboards.createdAt,
         updatedAt: moodboards.updatedAt,
         username: users.username,
@@ -122,6 +123,12 @@ export async function GET(req: Request) {
         editHistory: row.editHistory ?? [],
         viewCount: row.viewCount ?? 0,
         editCount: row.editCount ?? 0,
+        publishedAt:
+          row.publishedAt instanceof Date
+            ? row.publishedAt.toISOString()
+            : row.publishedAt
+              ? String(row.publishedAt)
+              : null,
         createdAt:
           row.createdAt instanceof Date
             ? row.createdAt.toISOString()

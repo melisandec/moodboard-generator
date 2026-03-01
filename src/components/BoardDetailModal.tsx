@@ -207,6 +207,26 @@ export default function BoardDetailModal({
                 )}
               </div>
 
+              {/* Published / Updated timestamps */}
+              <div className="mt-2 flex flex-col gap-0.5 text-[11px] text-neutral-400">
+                {board.publishedAt && (
+                  <span>
+                    Published on{" "}
+                    {new Date(board.publishedAt).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                )}
+                <span>
+                  Last updated{" "}
+                  {new Date(board.updatedAt).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+              </div>
+
               {/* Attribution chain */}
               {board.editHistory && board.editHistory.length > 0 && (
                 <div className="mt-3 rounded-md bg-neutral-50 dark:bg-neutral-700/50 px-3 py-2">

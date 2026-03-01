@@ -53,6 +53,7 @@ export interface Artwork {
   viewCount: number;
   editCount: number;
   remixOfId?: string;
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Small JPEG data URL for collection grid preview */

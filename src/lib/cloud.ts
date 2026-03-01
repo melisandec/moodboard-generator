@@ -178,6 +178,7 @@ export async function pushToCloud(
     isPublic: aw.isPublic ?? false,
     editHistory: aw.editHistory ?? [],
     remixOfId: aw.remixOfId ?? null,
+    publishedAt: aw.publishedAt ?? null,
     createdAt: aw.createdAt,
     updatedAt: aw.updatedAt,
     syncVersion: 1,
@@ -244,6 +245,7 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
       viewCount?: number;
       editCount?: number;
       remixOfId?: string;
+      publishedAt?: string | number | null;
     }>;
     imageMap: Record<
       string,
@@ -304,6 +306,9 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
       viewCount: board.viewCount ?? 0,
       editCount: board.editCount ?? 0,
       remixOfId: board.remixOfId,
+      publishedAt: board.publishedAt
+        ? toIso(board.publishedAt as string | number)
+        : null,
       createdAt: toIso(board.createdAt),
       updatedAt: toIso(board.updatedAt),
     };
@@ -326,6 +331,7 @@ export interface PublicBoardSummary {
   editHistory: EditHistoryEntry[];
   viewCount: number;
   editCount: number;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

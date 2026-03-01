@@ -33,6 +33,7 @@ export async function GET(
         viewCount: moodboards.viewCount,
         editCount: moodboards.editCount,
         remixOfId: moodboards.remixOfId,
+        publishedAt: moodboards.publishedAt,
         createdAt: moodboards.createdAt,
         updatedAt: moodboards.updatedAt,
         username: users.username,
@@ -83,6 +84,12 @@ export async function GET(
       editHistory: board.editHistory ?? [],
       viewCount: board.viewCount ?? 0,
       editCount: board.editCount ?? 0,
+      publishedAt:
+        board.publishedAt instanceof Date
+          ? board.publishedAt.toISOString()
+          : board.publishedAt
+            ? String(board.publishedAt)
+            : null,
       createdAt:
         board.createdAt instanceof Date
           ? board.createdAt.toISOString()

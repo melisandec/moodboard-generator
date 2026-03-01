@@ -34,6 +34,15 @@ export async function POST(req: Request) {
 
       if (existing) {
         if ((board.syncVersion ?? 1) >= (existing.syncVersion ?? 1)) {
+          // Preserve publishedAt: don't overwrite once set
+          const existingPublishedAt = existing.publishedAt;
+          // If switching to public for first time and no publishedAt yet, set it now
+          const publishedAt =
+            existingPublishedAt ??
+            (board.isPublic && board.publishedAt
+              ? new Date(board.publishedAt)
+              : null);
+
           await db
             .update(moodboards)
             .set({
@@ -54,12 +63,20 @@ export async function POST(req: Request) {
                 ? board.editHistory.slice(0, 10)
                 : [],
               remixOfId: board.remixOfId ?? null,
+              publishedAt,
               updatedAt: new Date(board.updatedAt || Date.now()),
               syncVersion: (existing.syncVersion ?? 1) + 1,
             })
             .where(eq(moodboards.id, board.id));
         }
       } else {
+        // On insert: set publishedAt if provided or if board is public (set to now)
+        const publishedAt = board.publishedAt
+          ? new Date(board.publishedAt)
+          : board.isPublic
+            ? new Date()
+            : null;
+
         await db.insert(moodboards).values({
           id: board.id,
           fid,
@@ -80,6 +97,7 @@ export async function POST(req: Request) {
             ? board.editHistory.slice(0, 10)
             : [],
           remixOfId: board.remixOfId ?? null,
+          publishedAt,
           createdAt: new Date(board.createdAt || Date.now()),
           updatedAt: new Date(board.updatedAt || Date.now()),
           syncVersion: 1,
