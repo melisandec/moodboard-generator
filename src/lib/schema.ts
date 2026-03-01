@@ -4,7 +4,14 @@ export const users = sqliteTable("users", {
   fid: text("fid").primaryKey(),
   username: text("username"),
   pfpUrl: text("pfp_url"),
+  bio: text("bio").default(""),
+  socialLinks: text("social_links", { mode: "json" })
+    .notNull()
+    .$type<Record<string, string>>()
+    .default({}),
+  followerCount: integer("follower_count").default(0),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 export const moodboards = sqliteTable(
@@ -36,6 +43,7 @@ export const moodboards = sqliteTable(
     editCount: integer("edit_count").default(0),
     lastRemixAt: integer("last_remix_at", { mode: "timestamp" }),
     remixOfId: text("remix_of_id"),
+    folderId: text("folder_id").references(() => folders.id),
     previewUrl: text("preview_url"),
     publishedAt: integer("published_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -69,6 +77,79 @@ export const images = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (table) => [index("images_fid_idx").on(table.fid)],
+);
+
+export const folders = sqliteTable(
+  "folders",
+  {
+    id: text("id").primaryKey(),
+    fid: text("fid")
+      .notNull()
+      .references(() => users.fid),
+    name: text("name").notNull(),
+    description: text("description").default(""),
+    isPublic: integer("is_public", { mode: "boolean" }).default(false),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("folders_fid_idx").on(table.fid),
+    index("folders_public_idx").on(table.isPublic),
+  ],
+);
+
+export const reactions = sqliteTable(
+  "reactions",
+  {
+    id: text("id").primaryKey(),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    fid: text("fid")
+      .notNull()
+      .references(() => users.fid),
+    emoji: text("emoji").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("reactions_board_idx").on(table.boardId),
+    index("reactions_fid_idx").on(table.fid),
+    index("reactions_emoji_idx").on(table.boardId, table.emoji),
+  ],
+);
+
+export const comments = sqliteTable(
+  "comments",
+  {
+    id: text("id").primaryKey(),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    fid: text("fid")
+      .notNull()
+      .references(() => users.fid),
+    text: text("text").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("comments_board_idx").on(table.boardId),
+    index("comments_fid_idx").on(table.fid),
+  ],
+);
+
+export const userStats = sqliteTable(
+  "user_stats",
+  {
+    fid: text("fid")
+      .primaryKey()
+      .references(() => users.fid),
+    totalBoardsPublished: integer("total_boards_published").default(0),
+    totalViews: integer("total_views").default(0),
+    totalRemixes: integer("total_remixes").default(0),
+    mostRemixedBoardId: text("most_remixed_board_id"),
+    thisMonthViews: integer("this_month_views").default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
 );
 
 export interface EditHistoryEntry {

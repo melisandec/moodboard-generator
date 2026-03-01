@@ -18,14 +18,19 @@ export async function POST(req: Request) {
 
     if (existing) {
       await db.update(users)
-        .set({ username: username ?? existing.username, pfpUrl: pfpUrl ?? existing.pfpUrl })
+        .set({ username: username ?? existing.username, pfpUrl: pfpUrl ?? existing.pfpUrl, updatedAt: new Date() })
         .where(eq(users.fid, fid));
     } else {
+      const now = new Date();
       await db.insert(users).values({
         fid,
         username: username ?? '',
         pfpUrl: pfpUrl ?? '',
-        createdAt: new Date(),
+        bio: '',
+        socialLinks: {},
+        followerCount: 0,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

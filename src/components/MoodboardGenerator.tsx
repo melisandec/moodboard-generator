@@ -35,6 +35,7 @@ import { useImageManagement } from "./hooks/useImageManagement";
 const MIN_IMAGES = 4;
 const MAX_IMAGES = 20;
 const BG_PRESETS = ["#FFFFFF", "#F8F8F8", "#F0F0F0", "#FAF9F6", "#000000"];
+const ADDED_TO_COLLECTION_KEY = "moodboard-added-to-collection";
 
 type View = "create" | "auto-result" | "manual" | "library";
 type ColSort = "newest" | "oldest" | "title" | "images";
@@ -303,6 +304,7 @@ export default function MoodboardGenerator() {
   const [caption, setCaption] = useState("");
   const [view, setView] = useState<View>("create");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [collectionGateReady, setCollectionGateReady] = useState(true);
 
   // Auto-mode
   const [moodboardUrl, setMoodboardUrl] = useState<string | null>(null);
@@ -549,6 +551,22 @@ export default function MoodboardGenerator() {
         /* ignore */
       }
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const inMiniApp = await sdk.isInMiniApp().catch(() => false);
+      const hasAddedToCollection =
+        localStorage.getItem(ADDED_TO_COLLECTION_KEY) === "true";
+      if (!cancelled) {
+        setCollectionGateReady(!inMiniApp || hasAddedToCollection);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Persist custom categories
@@ -1266,7 +1284,9 @@ export default function MoodboardGenerator() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
-      <FirstTimeModal />
+      <FirstTimeModal
+        onAddedToCollection={() => setCollectionGateReady(true)}
+      />
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-5 py-6">
         {/* Storage unavailable banner */}
         {!storageAvailable && (
@@ -1465,8 +1485,11 @@ export default function MoodboardGenerator() {
         {canGenerate && (
           <div className="flex gap-3">
             <button
-              onClick={generate}
-              disabled={isProcessing}
+              onClick={() => {
+                if (!collectionGateReady) return;
+                void generate();
+              }}
+              disabled={isProcessing || !collectionGateReady}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 dark:border-neutral-600 py-3 text-sm font-light text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-100 disabled:opacity-50"
             >
               {isProcessing ? (
@@ -1478,13 +1501,22 @@ export default function MoodboardGenerator() {
               )}
             </button>
             <button
-              onClick={enterManualMode}
-              disabled={isProcessing}
+              onClick={() => {
+                if (!collectionGateReady) return;
+                void enterManualMode();
+              }}
+              disabled={isProcessing || !collectionGateReady}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-sm border border-neutral-300 dark:border-neutral-600 py-3 text-sm font-light text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-100 disabled:opacity-50"
             >
               Arrange
             </button>
           </div>
+        )}
+
+        {canGenerate && !collectionGateReady && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            Add this app to your Warpcast favorites to unlock generation.
+          </p>
         )}
 
         {!title.trim() &&

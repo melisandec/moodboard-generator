@@ -5,11 +5,16 @@ import { sdk } from "@farcaster/miniapp-sdk";
 
 interface FirstTimeModalProps {
   onDismiss?: () => void;
+  onAddedToCollection?: () => void;
 }
 
 const FIRST_TIME_KEY = "moodboard-first-visit";
+const ADDED_TO_COLLECTION_KEY = "moodboard-added-to-collection";
 
-export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
+export function FirstTimeModal({
+  onDismiss,
+  onAddedToCollection,
+}: FirstTimeModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMiniApp, setIsMiniApp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,8 +27,14 @@ export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
         try {
           const inMiniApp = await sdk.isInMiniApp();
           setIsMiniApp(inMiniApp);
-          setIsOpen(true);
-          localStorage.setItem(FIRST_TIME_KEY, "true");
+
+          if (inMiniApp) {
+            const alreadyAdded =
+              localStorage.getItem(ADDED_TO_COLLECTION_KEY) === "true";
+            setIsOpen(!alreadyAdded);
+          } else {
+            setIsOpen(true);
+          }
         } catch {
           console.log("Not in mini app context");
           setIsOpen(false);
@@ -41,6 +52,10 @@ export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
       // This uses the mini app SDK to communicate back to Warpcast
       await sdk.actions.ready?.();
 
+      localStorage.setItem(ADDED_TO_COLLECTION_KEY, "true");
+      localStorage.setItem(FIRST_TIME_KEY, "true");
+      onAddedToCollection?.();
+
       // In Warpcast, users typically pin apps through a long-press or
       // through Warpcast's app management interface
     } catch (err) {
@@ -52,8 +67,16 @@ export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
   };
 
   const handleClose = () => {
+    localStorage.setItem(FIRST_TIME_KEY, "true");
     setIsOpen(false);
     onDismiss?.();
+  };
+
+  const handleAlreadyAdded = () => {
+    localStorage.setItem(ADDED_TO_COLLECTION_KEY, "true");
+    localStorage.setItem(FIRST_TIME_KEY, "true");
+    onAddedToCollection?.();
+    handleClose();
   };
 
   if (!isOpen) return null;
@@ -90,26 +113,37 @@ export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
         {/* Actions */}
         <div className="space-y-3">
           {isMiniApp && (
+            <>
+              <button
+                onClick={handleAddToCollection}
+                disabled={isLoading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2 px-4 rounded-lg transition"
+              >
+                {isLoading ? "Adding..." : "Add to Favorites"}
+              </button>
+              <button
+                onClick={handleAlreadyAdded}
+                disabled={isLoading}
+                className="w-full bg-gray-100 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 text-gray-900 dark:text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-60"
+              >
+                Already added? Continue
+              </button>
+            </>
+          )}
+          {!isMiniApp && (
             <button
-              onClick={handleAddToCollection}
-              disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2 px-4 rounded-lg transition"
+              onClick={handleClose}
+              className="w-full bg-gray-100 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 text-gray-900 dark:text-white font-medium py-2 px-4 rounded-lg transition"
             >
-              {isLoading ? "Adding..." : "Add to Favorites"}
+              Get Started
             </button>
           )}
-          <button
-            onClick={handleClose}
-            className="w-full bg-gray-100 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 text-gray-900 dark:text-white font-medium py-2 px-4 rounded-lg transition"
-          >
-            {isMiniApp ? "Start Creating" : "Get Started"}
-          </button>
         </div>
 
         {/* Footer */}
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-4">
           {isMiniApp
-            ? "You can find this app anytime in Warpcast"
+            ? "Add this app to favorites to unlock board generation"
             : "Open this link in Warpcast to get started"}
         </p>
       </div>
