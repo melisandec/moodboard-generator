@@ -2,19 +2,11 @@
 
 import type { PublicBoardSummary } from "@/lib/cloud";
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 interface FeedCardProps {
@@ -28,6 +20,7 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
     .sort((a, b) => a.zIndex - b.zIndex);
   const hasPreview =
     previewImages.length > 0 && board.canvasWidth > 0 && board.canvasHeight > 0;
+  const missingCount = Math.max(0, board.previewMissingCount ?? 0);
 
   return (
     <button
@@ -58,6 +51,13 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
             />
           ))}
         </div>
+      ) : board.thumbnailUrl ? (
+        <img
+          src={board.thumbnailUrl}
+          alt={board.title}
+          loading="lazy"
+          className="aspect-[3/4] w-full object-cover"
+        />
       ) : (
         <div className="flex aspect-[3/4] w-full items-center justify-center bg-neutral-100 dark:bg-neutral-700">
           <svg
@@ -73,6 +73,12 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
             <circle cx="8.5" cy="8.5" r="1.5" />
             <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
           </svg>
+        </div>
+      )}
+
+      {missingCount > 0 && (
+        <div className="absolute left-2 top-2 rounded-full bg-amber-100/90 dark:bg-amber-900/70 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+          {missingCount} missing asset{missingCount > 1 ? "s" : ""}
         </div>
       )}
 
@@ -99,8 +105,14 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
         </div>
 
         {/* Meta row */}
+        <div className="mt-1.5 flex flex-col gap-0.5 text-[10px] text-neutral-400">
+          <span>
+            Published on {formatDateTime(board.publishedAt ?? board.createdAt)}
+          </span>
+          <span>Last updated {formatDateTime(board.updatedAt)}</span>
+        </div>
+
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-neutral-400">
-          <span>Published {timeAgo(board.publishedAt ?? board.createdAt)}</span>
           {board.viewCount > 0 && (
             <span className="flex items-center gap-0.5">
               <svg

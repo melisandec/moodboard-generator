@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   saveArtwork,
   loadArtworks,
@@ -76,6 +76,8 @@ export function useCollectionManager(
   const [colCatFilter, setColCatFilter] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
 
   // ---- Load on mount ----
   useEffect(() => {
@@ -106,83 +108,109 @@ export function useCollectionManager(
   // ---- Save to collection ----
   const saveToCollection = useCallback(
     async (forceIsPublic?: boolean) => {
-      const {
-        artworkId,
-        title,
-        caption,
-        canvasImages,
-        dimsW,
-        dimsH,
-        orientation,
-        bgColor,
-        imageMargin,
-        categories,
-        isPublic,
-        editHistory,
-        remixOfId,
-      } = saveCtx;
-      const now = new Date().toISOString();
-      const id =
-        artworkId ??
-        `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      let createdAt = now;
-      if (artworkId) {
-        const ex = savedArtworks.find((a) => a.id === artworkId);
-        if (ex) createdAt = ex.createdAt;
-      }
+      if (saveInFlightRef.current) return saveInFlightRef.current;
 
-      let thumbnail: string | undefined;
-      try {
-        console.log(
-          `[saveToCollection] Generating thumbnail with ${canvasImages.length} images`,
-        );
-        thumbnail = await renderThumbnailOffscreen(
+      const run = (async () => {
+        setIsSaving(true);
+        const {
+          artworkId,
+          title,
+          caption,
           canvasImages,
           dimsW,
           dimsH,
+          orientation,
           bgColor,
           imageMargin,
-          () =>
-            renderThumbnail(canvasImages, dimsW, dimsH, bgColor, imageMargin),
-        );
-        console.log(
-          `[saveToCollection] Thumbnail result length: ${thumbnail?.length || 0}`,
-        );
-      } catch (err) {
-        console.error(`[saveToCollection] Thumbnail generation failed:`, err);
-        /* non-critical */
-      }
+          categories,
+          isPublic,
+          editHistory,
+          remixOfId,
+        } = saveCtx;
+        const now = new Date().toISOString();
+        const id =
+          artworkId ??
+          `artwork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const existingArtwork = artworkId
+          ? savedArtworks.find((a) => a.id === artworkId)
+          : undefined;
+        let createdAt = now;
+        if (artworkId) {
+          if (existingArtwork) createdAt = existingArtwork.createdAt;
+        }
 
-      await saveArtwork({
-        id,
-        title: title.trim() || "Untitled",
-        caption: caption.trim(),
-        images: canvasImages,
-        canvasWidth: dimsW,
-        canvasHeight: dimsH,
-        orientation,
-        bgColor,
-        imageMargin,
-        categories,
-        thumbnail,
-        pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
-        isPublic: forceIsPublic ?? isPublic,
-        editHistory: editHistory ?? [],
-        viewCount: savedArtworks.find((a) => a.id === id)?.viewCount ?? 0,
-        editCount: savedArtworks.find((a) => a.id === id)?.editCount ?? 0,
-        remixOfId,
-        createdAt,
-        updatedAt: now,
+        const nextIsPublic = forceIsPublic ?? isPublic;
+        const wasPublic = existingArtwork?.isPublic ?? false;
+        setSaveMsg(nextIsPublic && !wasPublic ? "Publishing…" : "Saving…");
+
+        let thumbnail: string | undefined;
+        try {
+          console.log(
+            `[saveToCollection] Generating thumbnail with ${canvasImages.length} images`,
+          );
+          thumbnail = await renderThumbnailOffscreen(
+            canvasImages,
+            dimsW,
+            dimsH,
+            bgColor,
+            imageMargin,
+            () =>
+              renderThumbnail(canvasImages, dimsW, dimsH, bgColor, imageMargin),
+          );
+          console.log(
+            `[saveToCollection] Thumbnail result length: ${thumbnail?.length || 0}`,
+          );
+        } catch (err) {
+          console.error(`[saveToCollection] Thumbnail generation failed:`, err);
+          /* non-critical */
+        }
+
+        await saveArtwork({
+          id,
+          title: title.trim() || "Untitled",
+          caption: caption.trim(),
+          images: canvasImages,
+          canvasWidth: dimsW,
+          canvasHeight: dimsH,
+          orientation,
+          bgColor,
+          imageMargin,
+          categories,
+          thumbnail,
+          pinned: savedArtworks.find((a) => a.id === id)?.pinned ?? false,
+          isPublic: nextIsPublic,
+          editHistory: editHistory ?? [],
+          viewCount: savedArtworks.find((a) => a.id === id)?.viewCount ?? 0,
+          editCount: savedArtworks.find((a) => a.id === id)?.editCount ?? 0,
+          remixOfId,
+          previewUrl: existingArtwork?.previewUrl ?? null,
+          createdAt,
+          updatedAt: now,
+        });
+        setters.setArtworkId(id);
+        refreshCollection();
+        clearDraft().catch(() => {});
+
+        if (cloudUser) {
+          try {
+            await cloudSync();
+            refreshCollection();
+            setSaveMsg(nextIsPublic ? "Published" : "Saved");
+          } catch {
+            setSaveMsg("Sync failed — retry");
+          }
+        } else {
+          setSaveMsg(nextIsPublic ? "Published locally" : "Saved");
+        }
+
+        setTimeout(() => setSaveMsg(null), 2200);
+      })().finally(() => {
+        setIsSaving(false);
+        saveInFlightRef.current = null;
       });
-      setters.setArtworkId(id);
-      setSaveMsg("Saved");
-      setTimeout(() => setSaveMsg(null), 1500);
-      refreshCollection();
-      clearDraft().catch(() => {});
-      if (cloudUser)
-        cloudSync()
-          .then(() => refreshCollection())
-          .catch(() => {});
+
+      saveInFlightRef.current = run;
+      return run;
     },
     [saveCtx, savedArtworks, setters, refreshCollection, cloudUser, cloudSync],
   );
@@ -332,6 +360,7 @@ export function useCollectionManager(
   return {
     savedArtworks,
     saveMsg,
+    isSaving,
     colSearch,
     setColSearch,
     colSort,

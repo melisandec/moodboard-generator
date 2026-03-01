@@ -443,6 +443,7 @@ export default function MoodboardGenerator() {
   const {
     savedArtworks,
     saveMsg,
+    isSaving,
     colSearch,
     setColSearch,
     colSort,
@@ -605,6 +606,31 @@ export default function MoodboardGenerator() {
       } catch (err) {
         console.error("Remix from URL failed:", err);
       } finally {
+        setIsProcessing(false);
+      }
+    })();
+  }, [searchParams, cloudUser, cloudSync, loadArtworkForEditing]);
+
+  // Handle owner edit from URL (?editPublished=boardId)
+  const editPublishedHandled = useRef(false);
+  useEffect(() => {
+    const editPublishedId = searchParams.get("editPublished");
+    if (!editPublishedId || !cloudUser || editPublishedHandled.current) return;
+    editPublishedHandled.current = true;
+
+    (async () => {
+      try {
+        setIsProcessing(true);
+        const synced = await cloudSync();
+        const existing = synced.find((a) => a.id === editPublishedId);
+        if (!existing) {
+          throw new Error("Published board not found in your collection");
+        }
+        loadArtworkForEditing(existing);
+      } catch (err) {
+        console.error("Edit published from URL failed:", err);
+      } finally {
+        window.history.replaceState({}, "", "/");
         setIsProcessing(false);
       }
     })();
@@ -839,11 +865,12 @@ export default function MoodboardGenerator() {
                 setIsPublic(next);
                 await saveToCollection(next);
               }}
+              disabled={isSaving}
               className={`flex min-h-[44px] items-center gap-1 rounded-full border px-2.5 text-[11px] transition-colors ${
                 isPublic
                   ? "border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                   : "border-neutral-300 dark:border-neutral-600 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-              }`}
+              } disabled:opacity-50`}
               aria-label={isPublic ? "Set Private" : "Set Public"}
             >
               {isPublic ? (
@@ -882,9 +909,10 @@ export default function MoodboardGenerator() {
               onClick={() => {
                 void saveToCollection();
               }}
-              className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-3 text-[11px] text-neutral-600 dark:text-neutral-300 hover:border-neutral-500"
+              disabled={isSaving}
+              className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-3 text-[11px] text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 disabled:opacity-50"
             >
-              Save
+              {isSaving ? "Saving…" : "Save"}
             </button>
           </div>
         </header>

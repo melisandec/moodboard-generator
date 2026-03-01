@@ -109,6 +109,14 @@ export default function FeedPage() {
     [user, router],
   );
 
+  const handleEditPublished = useCallback(
+    (boardId: string) => {
+      if (!user) return;
+      router.push(`/?editPublished=${boardId}`);
+    },
+    [user, router],
+  );
+
   // Theme
   const [isDark, setIsDark] = useState(false);
   useEffect(() => {
@@ -314,7 +322,9 @@ export default function FeedPage() {
           boardId={selectedBoardId}
           onClose={() => setSelectedBoardId(null)}
           onRemix={handleRemix}
+          onEditPublished={handleEditPublished}
           isAuthenticated={!!user}
+          viewerFid={user?.fid ? String(user.fid) : undefined}
         />
       )}
     </div>

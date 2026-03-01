@@ -53,6 +53,7 @@ export interface Artwork {
   viewCount: number;
   editCount: number;
   remixOfId?: string;
+  previewUrl?: string | null;
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;

@@ -36,6 +36,7 @@ export const moodboards = sqliteTable(
     editCount: integer("edit_count").default(0),
     lastRemixAt: integer("last_remix_at", { mode: "timestamp" }),
     remixOfId: text("remix_of_id"),
+    previewUrl: text("preview_url"),
     publishedAt: integer("published_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),

@@ -3,6 +3,13 @@ import { getDb } from "@/lib/db";
 import { moodboards, images } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
+import { revalidateTag } from "next/cache";
+
+function toDate(value: unknown, fallback = new Date()): Date {
+  if (!value) return fallback;
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? fallback : d;
+}
 
 export async function POST(req: Request) {
   try {
@@ -22,9 +29,36 @@ export async function POST(req: Request) {
     }
 
     const db = getDb();
+    let saved = 0;
+    let shouldRevalidatePublicFeed = false;
+    const publicBoardTagIds = new Set<string>();
 
     for (const board of boards) {
       if (!board.id || !board.title || !board.canvasState) continue;
+
+      const incomingUpdatedAt = toDate(board.updatedAt, new Date());
+      const incomingCreatedAt = toDate(board.createdAt, incomingUpdatedAt);
+
+      const payload = {
+        title: String(board.title).slice(0, 200),
+        caption: String(board.caption ?? "").slice(0, 1000),
+        categories: Array.isArray(board.categories)
+          ? board.categories.slice(0, 20)
+          : [],
+        canvasState: board.canvasState,
+        canvasWidth: Number(board.canvasWidth) || 1080,
+        canvasHeight: Number(board.canvasHeight) || 1527,
+        background: String(board.background ?? "#f5f5f4").slice(0, 20),
+        orientation: String(board.orientation ?? "portrait"),
+        margin: !!board.margin,
+        pinned: !!board.pinned,
+        isPublic: !!board.isPublic,
+        editHistory: Array.isArray(board.editHistory)
+          ? board.editHistory.slice(0, 10)
+          : [],
+        remixOfId: board.remixOfId ?? null,
+        updatedAt: incomingUpdatedAt,
+      };
 
       const existing = await db
         .select()
@@ -32,80 +66,120 @@ export async function POST(req: Request) {
         .where(and(eq(moodboards.id, board.id), eq(moodboards.fid, fid)))
         .get();
 
-      if (existing) {
-        if ((board.syncVersion ?? 1) >= (existing.syncVersion ?? 1)) {
-          // Preserve publishedAt: don't overwrite once set
-          const existingPublishedAt = existing.publishedAt;
-          // If switching to public for first time and no publishedAt yet, set it now
-          const publishedAt =
-            existingPublishedAt ??
-            (board.isPublic && board.publishedAt
-              ? new Date(board.publishedAt)
-              : null);
+      if (payload.isPublic || existing?.isPublic) {
+        publicBoardTagIds.add(board.id);
+      }
 
-          await db
-            .update(moodboards)
-            .set({
-              title: String(board.title).slice(0, 200),
-              caption: String(board.caption ?? "").slice(0, 1000),
-              categories: Array.isArray(board.categories)
-                ? board.categories.slice(0, 20)
-                : [],
-              canvasState: board.canvasState,
-              canvasWidth: Number(board.canvasWidth) || 1080,
-              canvasHeight: Number(board.canvasHeight) || 1527,
-              background: String(board.background ?? "#f5f5f4").slice(0, 20),
-              orientation: String(board.orientation ?? "portrait"),
-              margin: !!board.margin,
-              pinned: !!board.pinned,
-              isPublic: !!board.isPublic,
-              editHistory: Array.isArray(board.editHistory)
-                ? board.editHistory.slice(0, 10)
-                : [],
-              remixOfId: board.remixOfId ?? null,
-              publishedAt,
-              updatedAt: new Date(board.updatedAt || Date.now()),
-              syncVersion: (existing.syncVersion ?? 1) + 1,
-            })
-            .where(eq(moodboards.id, board.id));
+      if (existing) {
+        const existingUpdatedAt =
+          existing.updatedAt instanceof Date
+            ? existing.updatedAt
+            : toDate(existing.updatedAt, new Date(0));
+
+        // Idempotent semantics: ignore stale or duplicate updates.
+        if (incomingUpdatedAt.getTime() < existingUpdatedAt.getTime()) {
+          continue;
+        }
+
+        const publishedAt =
+          existing.publishedAt ??
+          (payload.isPublic
+            ? board.publishedAt
+              ? toDate(board.publishedAt, incomingUpdatedAt)
+              : incomingUpdatedAt
+            : null);
+
+        await db
+          .update(moodboards)
+          .set({
+            ...payload,
+            previewUrl: board.previewUrl ?? existing.previewUrl ?? null,
+            publishedAt,
+            syncVersion:
+              Math.max(existing.syncVersion ?? 1, board.syncVersion ?? 1) + 1,
+          })
+          .where(eq(moodboards.id, board.id));
+        saved += 1;
+
+        if (payload.isPublic || existing.isPublic) {
+          shouldRevalidatePublicFeed = true;
         }
       } else {
         // On insert: set publishedAt if provided or if board is public (set to now)
         const publishedAt = board.publishedAt
-          ? new Date(board.publishedAt)
-          : board.isPublic
-            ? new Date()
+          ? toDate(board.publishedAt, incomingUpdatedAt)
+          : payload.isPublic
+            ? incomingUpdatedAt
             : null;
 
-        await db.insert(moodboards).values({
-          id: board.id,
-          fid,
-          title: String(board.title).slice(0, 200),
-          caption: String(board.caption ?? "").slice(0, 1000),
-          categories: Array.isArray(board.categories)
-            ? board.categories.slice(0, 20)
-            : [],
-          canvasState: board.canvasState,
-          canvasWidth: Number(board.canvasWidth) || 1080,
-          canvasHeight: Number(board.canvasHeight) || 1527,
-          background: String(board.background ?? "#f5f5f4").slice(0, 20),
-          orientation: String(board.orientation ?? "portrait"),
-          margin: !!board.margin,
-          pinned: !!board.pinned,
-          isPublic: !!board.isPublic,
-          editHistory: Array.isArray(board.editHistory)
-            ? board.editHistory.slice(0, 10)
-            : [],
-          remixOfId: board.remixOfId ?? null,
-          publishedAt,
-          createdAt: new Date(board.createdAt || Date.now()),
-          updatedAt: new Date(board.updatedAt || Date.now()),
-          syncVersion: 1,
-        });
+        try {
+          await db.insert(moodboards).values({
+            id: board.id,
+            fid,
+            ...payload,
+            previewUrl: board.previewUrl ?? null,
+            publishedAt,
+            createdAt: incomingCreatedAt,
+            syncVersion: Math.max(1, board.syncVersion ?? 1),
+          });
+          saved += 1;
+
+          if (payload.isPublic) {
+            shouldRevalidatePublicFeed = true;
+          }
+        } catch {
+          // Concurrent duplicate insert: treat as update path.
+          const existingAfterConflict = await db
+            .select()
+            .from(moodboards)
+            .where(and(eq(moodboards.id, board.id), eq(moodboards.fid, fid)))
+            .get();
+          if (!existingAfterConflict)
+            throw new Error("Insert conflict without existing row");
+
+          const existingUpdatedAt =
+            existingAfterConflict.updatedAt instanceof Date
+              ? existingAfterConflict.updatedAt
+              : toDate(existingAfterConflict.updatedAt, new Date(0));
+          if (incomingUpdatedAt.getTime() < existingUpdatedAt.getTime()) {
+            continue;
+          }
+
+          const conflictPublishedAt =
+            existingAfterConflict.publishedAt ??
+            (payload.isPublic ? incomingUpdatedAt : null);
+
+          await db
+            .update(moodboards)
+            .set({
+              ...payload,
+              previewUrl:
+                board.previewUrl ?? existingAfterConflict.previewUrl ?? null,
+              publishedAt: conflictPublishedAt,
+              syncVersion:
+                Math.max(
+                  existingAfterConflict.syncVersion ?? 1,
+                  board.syncVersion ?? 1,
+                ) + 1,
+            })
+            .where(eq(moodboards.id, board.id));
+          saved += 1;
+
+          if (payload.isPublic || existingAfterConflict.isPublic) {
+            shouldRevalidatePublicFeed = true;
+          }
+        }
       }
     }
 
-    return NextResponse.json({ ok: true });
+    if (shouldRevalidatePublicFeed) {
+      revalidateTag("public-feed", "max");
+      for (const boardId of publicBoardTagIds) {
+        revalidateTag(`public-board:${boardId}`, "max");
+      }
+    }
+
+    return NextResponse.json({ saved, status: "ok" });
   } catch (err) {
     console.error("Sync push error:", err);
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });

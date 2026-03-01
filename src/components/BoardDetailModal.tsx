@@ -9,7 +9,9 @@ interface BoardDetailModalProps {
   boardId: string;
   onClose: () => void;
   onRemix: (boardId: string) => void;
+  onEditPublished?: (boardId: string) => void;
   isAuthenticated: boolean;
+  viewerFid?: string;
 }
 
 function timeAgo(dateStr: string): string {
@@ -27,16 +29,38 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`;
 }
 
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export default function BoardDetailModal({
   boardId,
   onClose,
   onRemix,
+  onEditPublished,
   isAuthenticated,
+  viewerFid,
 }: BoardDetailModalProps) {
   const [board, setBoard] = useState<PublicBoardDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [remixing, setRemixing] = useState(false);
+
+  const sortedCanvas = board
+    ? (board.canvasState ?? []).slice().sort((a, b) => a.zIndex - b.zIndex)
+    : [];
+  const renderableCanvas =
+    board && board.canvasWidth > 0 && board.canvasHeight > 0
+      ? sortedCanvas.filter((ci) => !!board.imageMap?.[ci.imageHash]?.url)
+      : [];
+  const missingAssetCount = Math.max(
+    0,
+    sortedCanvas.length - renderableCanvas.length,
+  );
+  const isOwner = !!board && !!viewerFid && board.creatorFid === viewerFid;
 
   // Fetch board detail + increment view
   useEffect(() => {
@@ -77,6 +101,12 @@ export default function BoardDetailModal({
       setRemixing(false);
     }
   }, [boardId, onRemix]);
+
+  const handleEditPublished = useCallback(() => {
+    if (!onEditPublished) return;
+    onEditPublished(boardId);
+    onClose();
+  }, [boardId, onClose, onEditPublished]);
 
   // Close on escape
   useEffect(() => {
@@ -146,36 +176,33 @@ export default function BoardDetailModal({
                     : "3/4",
               }}
             >
-              {(board.canvasState ?? []).length > 0 ? (
-                board.canvasState
-                  .slice()
-                  .sort((a, b) => a.zIndex - b.zIndex)
-                  .map((ci) => {
-                    const src = board.imageMap?.[ci.imageHash]?.url;
-                    if (
-                      !src ||
-                      board.canvasWidth <= 0 ||
-                      board.canvasHeight <= 0
-                    ) {
-                      return null;
-                    }
-                    return (
-                      <img
-                        key={ci.id}
-                        src={src}
-                        alt=""
-                        className="absolute object-cover"
-                        style={{
-                          left: `${(ci.x / board.canvasWidth) * 100}%`,
-                          top: `${(ci.y / board.canvasHeight) * 100}%`,
-                          width: `${(ci.width / board.canvasWidth) * 100}%`,
-                          height: `${(ci.height / board.canvasHeight) * 100}%`,
-                          transform: `rotate(${ci.rotation}deg)`,
-                          transformOrigin: "center center",
-                        }}
-                      />
-                    );
-                  })
+              {renderableCanvas.length > 0 ? (
+                renderableCanvas.map((ci) => {
+                  const src = board.imageMap?.[ci.imageHash]?.url;
+                  if (!src) return null;
+                  return (
+                    <img
+                      key={ci.id}
+                      src={src}
+                      alt=""
+                      className="absolute object-cover"
+                      style={{
+                        left: `${(ci.x / board.canvasWidth) * 100}%`,
+                        top: `${(ci.y / board.canvasHeight) * 100}%`,
+                        width: `${(ci.width / board.canvasWidth) * 100}%`,
+                        height: `${(ci.height / board.canvasHeight) * 100}%`,
+                        transform: `rotate(${ci.rotation}deg)`,
+                        transformOrigin: "center center",
+                      }}
+                    />
+                  );
+                })
+              ) : board.thumbnailUrl ? (
+                <img
+                  src={board.thumbnailUrl}
+                  alt={board.title}
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <span className="text-sm text-neutral-400">
                   No preview available
@@ -237,24 +264,19 @@ export default function BoardDetailModal({
                 )}
               </div>
 
+              {missingAssetCount > 0 && (
+                <div className="mt-2 rounded-md bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                  Preview is partial: {missingAssetCount} image source
+                  {missingAssetCount > 1 ? "s are" : " is"} unavailable.
+                </div>
+              )}
+
               {/* Published / Updated timestamps */}
               <div className="mt-2 flex flex-col gap-0.5 text-[11px] text-neutral-400">
                 {board.publishedAt && (
-                  <span>
-                    Published on{" "}
-                    {new Date(board.publishedAt).toLocaleString(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </span>
+                  <span>Published on {formatDateTime(board.publishedAt)}</span>
                 )}
-                <span>
-                  Last updated{" "}
-                  {new Date(board.updatedAt).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </span>
+                <span>Last updated {formatDateTime(board.updatedAt)}</span>
               </div>
 
               {/* Attribution chain */}
@@ -300,6 +322,14 @@ export default function BoardDetailModal({
 
               {/* Action buttons */}
               <div className="mt-4 flex gap-3">
+                {isOwner && (
+                  <button
+                    onClick={handleEditPublished}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-200 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-600"
+                  >
+                    ✏️ Edit published board
+                  </button>
+                )}
                 <button
                   onClick={handleRemix}
                   disabled={!isAuthenticated || remixing}

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { moodboards } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
+import { revalidateTag } from "next/cache";
 
 export async function PATCH(
   req: Request,
@@ -50,6 +51,9 @@ export async function PATCH(
       .update(moodboards)
       .set({ isPublic, publishedAt, updatedAt: now })
       .where(eq(moodboards.id, boardId));
+
+    revalidateTag("public-feed", "max");
+    revalidateTag(`public-board:${boardId}`, "max");
 
     return NextResponse.json({ ok: true });
   } catch (err) {

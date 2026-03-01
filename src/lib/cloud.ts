@@ -153,13 +153,35 @@ export async function pushToCloud(
         });
       }
     }
+    if (aw.thumbnail?.startsWith("data:")) {
+      const previewHash = imageHash(aw.thumbnail);
+      if (!uniqueImages.has(previewHash)) {
+        uniqueImages.set(previewHash, {
+          dataUrl: aw.thumbnail,
+          nw: aw.canvasWidth,
+          nh: aw.canvasHeight,
+        });
+      }
+    }
   }
 
   // Upload images in parallel (max concurrency)
-  const uploadTasks = [...uniqueImages.entries()].map(
+  const imageUrlByHash = new Map<string, string>();
+  const uploadEntries = [...uniqueImages.entries()];
+  const uploadTasks = uploadEntries.map(
     ([hash, { dataUrl, nw, nh }]) =>
-      () =>
-        uploadImage(dataUrl, hash, `image-${hash}`, nw, nh, fetchFn),
+      async () => {
+        const url = await uploadImage(
+          dataUrl,
+          hash,
+          `image-${hash}`,
+          nw,
+          nh,
+          fetchFn,
+        );
+        imageUrlByHash.set(hash, url);
+        return url;
+      },
   );
   await runConcurrent(uploadTasks);
 
@@ -178,6 +200,9 @@ export async function pushToCloud(
     isPublic: aw.isPublic ?? false,
     editHistory: aw.editHistory ?? [],
     remixOfId: aw.remixOfId ?? null,
+    previewUrl: aw.thumbnail?.startsWith("data:")
+      ? (imageUrlByHash.get(imageHash(aw.thumbnail)) ?? aw.previewUrl ?? null)
+      : (aw.previewUrl ?? null),
     publishedAt: aw.publishedAt ?? null,
     createdAt: aw.createdAt,
     updatedAt: aw.updatedAt,
@@ -245,6 +270,7 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
       viewCount?: number;
       editCount?: number;
       remixOfId?: string;
+      previewUrl?: string | null;
       publishedAt?: string | number | null;
     }>;
     imageMap: Record<
@@ -306,6 +332,7 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
       viewCount: board.viewCount ?? 0,
       editCount: board.editCount ?? 0,
       remixOfId: board.remixOfId,
+      previewUrl: board.previewUrl ?? null,
       publishedAt: board.publishedAt
         ? toIso(board.publishedAt as string | number)
         : null,
@@ -325,6 +352,7 @@ export interface PublicBoardSummary {
   caption: string;
   categories: string[];
   thumbnailUrl: string | null;
+  previewMissingCount?: number;
   previewImages: Array<{
     url: string;
     x: number;
@@ -359,6 +387,7 @@ export interface PublicBoardDetail extends PublicBoardSummary {
     string,
     { url: string; naturalWidth: number; naturalHeight: number }
   >;
+  previewMissingCount?: number;
   remixOfId?: string;
 }
 

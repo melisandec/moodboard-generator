@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { moodboards, users, images } from "@/lib/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
+import { revalidateTag } from "next/cache";
 import type { CloudCanvasImage, EditHistoryEntry } from "@/lib/schema";
 
 export async function POST(
@@ -119,6 +120,9 @@ export async function POST(
         lastRemixAt: now,
       })
       .where(eq(moodboards.id, boardId));
+
+    revalidateTag("public-feed", "max");
+    revalidateTag(`public-board:${boardId}`, "max");
 
     return NextResponse.json({ newBoardId });
   } catch (err) {
