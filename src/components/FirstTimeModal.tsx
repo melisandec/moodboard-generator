@@ -40,14 +40,8 @@ export function FirstTimeModal({ onDismiss }: FirstTimeModalProps) {
       // Signal to Warpcast to add this app to favorites
       // This uses the mini app SDK to communicate back to Warpcast
       await sdk.actions.ready?.();
-      
-      // Some versions of the SDK support this pattern for adding shortcuts
-      if (sdk.actions?.openUrl) {
-        // Fallback: open a deep link or show instructions
-        console.log("App added to collection request sent");
-      }
-      
-      // In Warpcast, users typically pin apps through a long-press or 
+
+      // In Warpcast, users typically pin apps through a long-press or
       // through Warpcast's app management interface
     } catch (err) {
       console.error("Error adding to collection:", err);

@@ -193,7 +193,10 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     }
 
     // Draw title/caption for full renders (not thumbnails)
-    if (req.type === "renderToBlob" && (req.title || req.caption || req.username)) {
+    if (
+      req.type === "renderToBlob" &&
+      (req.title || req.caption || req.username)
+    ) {
       drawTitleCaption(
         ctx,
         req.title ?? "",
