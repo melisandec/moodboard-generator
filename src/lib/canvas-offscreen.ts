@@ -169,27 +169,50 @@ export async function renderThumbnailOffscreen(
   /** Called when the worker is unavailable */
   mainThreadFallback: () => Promise<string>,
 ): Promise<string> {
+  console.log(
+    `[renderThumbnailOffscreen] Starting with ${images.length} images`,
+  );
+
   if (!workerFailed && typeof OffscreenCanvas !== "undefined") {
     try {
       const scale = Math.min(1, 200 / cw);
+      const filteredImages = images
+        .map((img) => {
+          const blob = dataUrlToBlob(img.dataUrl);
+          if (!blob) {
+            console.log(
+              `[renderThumbnailOffscreen] Image ${img.id} failed blob conversion`,
+            );
+          }
+          return blob
+            ? {
+                blob,
+                x: img.x,
+                y: img.y,
+                width: img.width,
+                height: img.height,
+                rotation: img.rotation,
+                zIndex: img.zIndex,
+              }
+            : null;
+        })
+        .filter((v): v is NonNullable<typeof v> => v !== null);
+
+      console.log(
+        `[renderThumbnailOffscreen] After filtering: ${filteredImages.length} valid images`,
+      );
+
+      // If no valid images, fall back to main thread
+      if (filteredImages.length === 0) {
+        console.log(
+          `[renderThumbnailOffscreen] No valid images, falling back to main thread`,
+        );
+        return mainThreadFallback();
+      }
+
       const request: RenderRequest = {
         type: "renderThumbnail",
-        images: images
-          .map((img) => {
-            const blob = dataUrlToBlob(img.dataUrl);
-            return blob
-              ? {
-                  blob,
-                  x: img.x,
-                  y: img.y,
-                  width: img.width,
-                  height: img.height,
-                  rotation: img.rotation,
-                  zIndex: img.zIndex,
-                }
-              : null;
-          })
-          .filter((v): v is NonNullable<typeof v> => v !== null),
+        images: filteredImages,
         canvasWidth: cw,
         canvasHeight: ch,
         bgColor,

@@ -122,6 +122,9 @@ export function useCollectionManager(
 
     let thumbnail: string | undefined;
     try {
+      console.log(
+        `[saveToCollection] Generating thumbnail with ${canvasImages.length} images`,
+      );
       thumbnail = await renderThumbnailOffscreen(
         canvasImages,
         dimsW,
@@ -130,7 +133,11 @@ export function useCollectionManager(
         imageMargin,
         () => renderThumbnail(canvasImages, dimsW, dimsH, bgColor, imageMargin),
       );
-    } catch {
+      console.log(
+        `[saveToCollection] Thumbnail result length: ${thumbnail?.length || 0}`,
+      );
+    } catch (err) {
+      console.error(`[saveToCollection] Thumbnail generation failed:`, err);
       /* non-critical */
     }
 

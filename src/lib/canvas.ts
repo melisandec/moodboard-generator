@@ -309,6 +309,7 @@ export async function renderThumbnail(
   bgColor = "#f5f5f4",
   margin = false,
 ): Promise<string> {
+  console.log(`[renderThumbnail] Starting with ${images.length} images`);
   const scale = Math.min(1, 200 / cw);
   const w = Math.round(cw * scale);
   const h = Math.round(ch * scale);
@@ -319,6 +320,11 @@ export async function renderThumbnail(
       im.dataUrl ? loadImageFromUrl(im.dataUrl) : Promise.reject("no dataUrl"),
     ),
   );
+
+  console.log(
+    `[renderThumbnail] Load results: ${results.filter((r) => r.status === "fulfilled").length} succeeded`,
+  );
+
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -334,30 +340,39 @@ export async function renderThumbnail(
     .filter((im): im is typeof im & { el: HTMLImageElement } => im.el !== null)
     .sort((a, b) => a.zIndex - b.zIndex);
 
+  console.log(`[renderThumbnail] Sorted images to render: ${sorted.length}`);
+
   const borderPx = margin ? Math.max(1, w * 0.003) : 0;
 
+  // Draw images if we have any
   for (const im of sorted) {
-    ctx.save();
-    const sx = im.x * scale;
-    const sy = im.y * scale;
-    const sw = im.width * scale;
-    const sh = im.height * scale;
-    ctx.translate(sx + sw / 2, sy + sh / 2);
-    ctx.rotate((im.rotation * Math.PI) / 180);
-    if (borderPx > 0) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(
-        -sw / 2 - borderPx,
-        -sh / 2 - borderPx,
-        sw + borderPx * 2,
-        sh + borderPx * 2,
-      );
+    try {
+      ctx.save();
+      const sx = im.x * scale;
+      const sy = im.y * scale;
+      const sw = im.width * scale;
+      const sh = im.height * scale;
+      ctx.translate(sx + sw / 2, sy + sh / 2);
+      ctx.rotate((im.rotation * Math.PI) / 180);
+      if (borderPx > 0) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(
+          -sw / 2 - borderPx,
+          -sh / 2 - borderPx,
+          sw + borderPx * 2,
+          sh + borderPx * 2,
+        );
+      }
+      ctx.drawImage(im.el, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+    } catch (err) {
+      console.error(`[renderThumbnail] Error drawing image ${im.id}:`, err);
     }
-    ctx.drawImage(im.el, -sw / 2, -sh / 2, sw, sh);
-    ctx.restore();
   }
 
-  return canvas.toDataURL("image/jpeg", 0.6);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+  console.log(`[renderThumbnail] Generated dataUrl length: ${dataUrl.length}`);
+  return dataUrl || "";
 }
 
 export function compressForUpload(
