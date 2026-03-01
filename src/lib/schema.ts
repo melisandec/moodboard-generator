@@ -137,20 +137,17 @@ export const comments = sqliteTable(
   ],
 );
 
-export const userStats = sqliteTable(
-  "user_stats",
-  {
-    fid: text("fid")
-      .primaryKey()
-      .references(() => users.fid),
-    totalBoardsPublished: integer("total_boards_published").default(0),
-    totalViews: integer("total_views").default(0),
-    totalRemixes: integer("total_remixes").default(0),
-    mostRemixedBoardId: text("most_remixed_board_id"),
-    thisMonthViews: integer("this_month_views").default(0),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-  },
-);
+export const userStats = sqliteTable("user_stats", {
+  fid: text("fid")
+    .primaryKey()
+    .references(() => users.fid),
+  totalBoardsPublished: integer("total_boards_published").default(0),
+  totalViews: integer("total_views").default(0),
+  totalRemixes: integer("total_remixes").default(0),
+  mostRemixedBoardId: text("most_remixed_board_id"),
+  thisMonthViews: integer("this_month_views").default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
 
 export interface EditHistoryEntry {
   fid: string;

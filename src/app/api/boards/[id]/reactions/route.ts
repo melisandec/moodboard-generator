@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const user = await verifyAuth(request);
@@ -20,10 +20,7 @@ export async function POST(
     const { emoji } = await request.json();
 
     if (!emoji) {
-      return NextResponse.json(
-        { error: "Emoji is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Emoji is required" }, { status: 400 });
     }
 
     const fid = String(user.fid);
@@ -35,16 +32,14 @@ export async function POST(
         and(
           eq(reactions.boardId, boardId),
           eq(reactions.fid, fid),
-          eq(reactions.emoji, emoji)
-        )
+          eq(reactions.emoji, emoji),
+        ),
       )
       .limit(1);
 
     if (existing.length > 0) {
       // Remove reaction
-      await db
-        .delete(reactions)
-        .where(eq(reactions.id, existing[0].id));
+      await db.delete(reactions).where(eq(reactions.id, existing[0].id));
 
       return NextResponse.json({ action: "removed", emoji });
     } else {
@@ -63,14 +58,14 @@ export async function POST(
     console.error("Error toggling reaction:", error);
     return NextResponse.json(
       { error: "Failed to toggle reaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const db = getDb();
@@ -90,7 +85,14 @@ export async function GET(
     // Aggregate reactions by emoji
     const aggregated: Record<
       string,
-      { count: number; reactors: Array<{ fid: string; username: string | null; pfpUrl: string | null }> }
+      {
+        count: number;
+        reactors: Array<{
+          fid: string;
+          username: string | null;
+          pfpUrl: string | null;
+        }>;
+      }
     > = {};
 
     allReactions.forEach(({ emoji, fid, username, pfpUrl }) => {
@@ -106,7 +108,7 @@ export async function GET(
     console.error("Error fetching reactions:", error);
     return NextResponse.json(
       { error: "Failed to fetch reactions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

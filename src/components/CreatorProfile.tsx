@@ -149,7 +149,9 @@ export default function CreatorProfile({ fid }: { fid: string }) {
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
             {profile.stats.totalRemixes}
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Remixes</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Remixes
+          </div>
         </div>
       </div>
 

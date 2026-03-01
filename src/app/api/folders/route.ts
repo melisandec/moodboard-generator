@@ -16,7 +16,10 @@ export async function POST(request: NextRequest) {
     const { name, description = "", isPublic = false } = await request.json();
 
     if (!name) {
-      return NextResponse.json({ error: "Folder name is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Folder name is required" },
+        { status: 400 },
+      );
     }
 
     const folderId = uuidv4();
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.error("Error creating folder:", error);
     return NextResponse.json(
       { error: "Failed to create folder" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching folders:", error);
     return NextResponse.json(
       { error: "Failed to fetch folders" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

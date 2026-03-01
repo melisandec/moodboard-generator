@@ -104,7 +104,10 @@ export default function ReactionButtons({
             {/* Reactors Tooltip */}
             {data && data.reactors.length > 0 && (
               <div className="group relative">
-                <div className="absolute bottom-full left-0 mb-2 hidden flex-col gap-1 rounded-lg border border-gray-200 bg-white p-2 shadow-lg group-hover:flex dark:border-gray-700 dark:bg-gray-900" style={{ minWidth: "180px" }}>
+                <div
+                  className="absolute bottom-full left-0 mb-2 hidden flex-col gap-1 rounded-lg border border-gray-200 bg-white p-2 shadow-lg group-hover:flex dark:border-gray-700 dark:bg-gray-900"
+                  style={{ minWidth: "180px" }}
+                >
                   {data.reactors.slice(0, 5).map((reactor) => (
                     <div
                       key={reactor.fid}

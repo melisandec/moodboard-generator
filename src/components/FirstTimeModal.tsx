@@ -112,7 +112,8 @@ export function FirstTimeModal({
             <>
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-3">
                 <p className="text-sm text-blue-900 dark:text-blue-300">
-                  <strong>📌 To pin:</strong> Long-press this app in Warpcast or go to settings
+                  <strong>📌 To pin:</strong> Long-press this app in Warpcast or
+                  go to settings
                 </p>
               </div>
               <button

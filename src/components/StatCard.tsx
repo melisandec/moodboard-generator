@@ -10,12 +10,7 @@ interface StatCardProps {
   };
 }
 
-export default function StatCard({
-  label,
-  value,
-  icon,
-  trend,
-}: StatCardProps) {
+export default function StatCard({ label, value, icon, trend }: StatCardProps) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
       <div className="flex items-center justify-between">
@@ -24,9 +19,7 @@ export default function StatCard({
             {label}
           </p>
           <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {typeof value === "number"
-              ? value.toLocaleString()
-              : value}
+            {typeof value === "number" ? value.toLocaleString() : value}
           </p>
           {trend && (
             <p

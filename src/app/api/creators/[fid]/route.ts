@@ -26,7 +26,7 @@ interface CreatorProfile {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ fid: string }> }
+  { params }: { params: Promise<{ fid: string }> },
 ) {
   try {
     const { fid } = await params;
@@ -66,8 +66,8 @@ export async function GET(
         and(
           eq(moodboards.fid, fid),
           eq(moodboards.isPublic, true),
-          eq(moodboards.publishedAt, moodboards.publishedAt)
-        )
+          eq(moodboards.publishedAt, moodboards.publishedAt),
+        ),
       )
       .orderBy(desc(moodboards.publishedAt))
       .limit(6);
@@ -92,7 +92,7 @@ export async function GET(
     console.error("Error fetching creator profile:", error);
     return NextResponse.json(
       { error: "Failed to fetch creator profile" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

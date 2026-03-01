@@ -103,11 +103,7 @@ export default function DashboardPage() {
           value={analytics.thisMonthViews.toLocaleString()}
           icon="📅"
         />
-        <StatCard
-          label="Remixes"
-          value={analytics.totalRemixes}
-          icon="🔄"
-        />
+        <StatCard label="Remixes" value={analytics.totalRemixes} icon="🔄" />
       </div>
 
       {/* Top Board */}

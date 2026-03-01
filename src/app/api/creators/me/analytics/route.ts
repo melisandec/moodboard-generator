@@ -30,13 +30,13 @@ export async function GET(request: NextRequest) {
         and(
           eq(moodboards.fid, fid),
           eq(moodboards.isPublic, true),
-          gte(moodboards.updatedAt, firstDayOfMonth)
-        )
+          gte(moodboards.updatedAt, firstDayOfMonth),
+        ),
       );
 
     const monthlyViewCount = thisMonthViews.reduce(
       (sum, board) => sum + (board.viewCount || 0),
-      0
+      0,
     );
 
     // Get most viewed board
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching analytics:", error);
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
