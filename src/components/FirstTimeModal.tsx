@@ -21,24 +21,26 @@ export function FirstTimeModal({
 
   useEffect(() => {
     const checkFirstVisit = async () => {
-      const hasVisited = localStorage.getItem(FIRST_TIME_KEY);
+      try {
+        const inMiniApp = await sdk.isInMiniApp();
+        setIsMiniApp(inMiniApp);
 
-      if (!hasVisited) {
-        try {
-          const inMiniApp = await sdk.isInMiniApp();
-          setIsMiniApp(inMiniApp);
+        const alreadyConfirmed =
+          localStorage.getItem(ADDED_TO_COLLECTION_KEY) === "true";
 
-          if (inMiniApp) {
-            const alreadyAdded =
-              localStorage.getItem(ADDED_TO_COLLECTION_KEY) === "true";
-            setIsOpen(!alreadyAdded);
-          } else {
+        // For mini app: always show modal if they haven't confirmed adding to collection
+        if (inMiniApp) {
+          setIsOpen(!alreadyConfirmed);
+        } else {
+          // For non-mini app: only show once on first visit
+          const hasVisited = localStorage.getItem(FIRST_TIME_KEY);
+          if (!hasVisited) {
             setIsOpen(true);
           }
-        } catch {
-          console.log("Not in mini app context");
-          setIsOpen(false);
         }
+      } catch {
+        console.log("Not in mini app context");
+        setIsOpen(false);
       }
     };
 
@@ -48,21 +50,15 @@ export function FirstTimeModal({
   const handleAddToCollection = async () => {
     try {
       setIsLoading(true);
-      // Signal to Warpcast to add this app to favorites
-      // This uses the mini app SDK to communicate back to Warpcast
-      await sdk.actions.ready?.();
-
+      // Set the flag indicating user has confirmed adding to collection
+      // Note: User must manually pin this app in Warpcast's app management
       localStorage.setItem(ADDED_TO_COLLECTION_KEY, "true");
-      localStorage.setItem(FIRST_TIME_KEY, "true");
       onAddedToCollection?.();
-
-      // In Warpcast, users typically pin apps through a long-press or
-      // through Warpcast's app management interface
+      handleClose();
     } catch (err) {
-      console.error("Error adding to collection:", err);
+      console.error("Error confirming collection:", err);
     } finally {
       setIsLoading(false);
-      handleClose();
     }
   };
 
@@ -114,19 +110,24 @@ export function FirstTimeModal({
         <div className="space-y-3">
           {isMiniApp && (
             <>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-3">
+                <p className="text-sm text-blue-900 dark:text-blue-300">
+                  <strong>📌 To pin:</strong> Long-press this app in Warpcast or go to settings
+                </p>
+              </div>
               <button
                 onClick={handleAddToCollection}
                 disabled={isLoading}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2 px-4 rounded-lg transition"
               >
-                {isLoading ? "Adding..." : "Add to Favorites"}
+                {isLoading ? "Confirming..." : "I've Pinned It"}
               </button>
               <button
                 onClick={handleAlreadyAdded}
                 disabled={isLoading}
                 className="w-full bg-gray-100 dark:bg-neutral-700 hover:bg-gray-200 dark:hover:bg-neutral-600 text-gray-900 dark:text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-60"
               >
-                Already added? Continue
+                Skip for now
               </button>
             </>
           )}
@@ -143,7 +144,7 @@ export function FirstTimeModal({
         {/* Footer */}
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-4">
           {isMiniApp
-            ? "Add this app to favorites to unlock board generation"
+            ? "Pin this app to unlock generation"
             : "Open this link in Warpcast to get started"}
         </p>
       </div>
