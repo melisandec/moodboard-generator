@@ -14,6 +14,7 @@ interface ExportConfig {
   bgColor: string;
   imageMargin: boolean;
   moodboardUrl: string | null;
+  username?: string;
 }
 
 /**
@@ -30,6 +31,7 @@ export function useCanvasExport(config: ExportConfig) {
     bgColor,
     imageMargin,
     moodboardUrl,
+    username,
   } = config;
   const [castStatus, setCastStatus] = useState<string | null>(null);
 
@@ -73,8 +75,13 @@ export function useCanvasExport(config: ExportConfig) {
   );
 
   const castToFarcaster = useCallback(async () => {
-    let text = title.trim();
-    if (caption.trim()) text += `\n\n${caption.trim()}`;
+    const trimmedTitle = title.trim() || "Untitled";
+    const trimmedCaption = caption.trim();
+    const byLine = username ? `by @${username}` : "";
+    let text = `Moodboard: \u201c${trimmedTitle}\u201d`;
+    if (trimmedCaption) text += ` ${trimmedCaption}`;
+    if (byLine) text += ` ${byLine}`;
+    text += `\n\nGenerate yours on Moodboard Generator \u2726 https://farcaster.xyz/miniapps/x1EOQs0RVPn5/moodboard-generator`;
 
     setCastStatus("Rendering image…");
     let imageUrl: string | undefined;
@@ -160,6 +167,7 @@ export function useCanvasExport(config: ExportConfig) {
   }, [
     title,
     caption,
+    username,
     view,
     canvasImages,
     dimsW,

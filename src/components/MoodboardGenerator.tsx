@@ -372,6 +372,7 @@ export default function MoodboardGenerator() {
     bgColor,
     imageMargin,
     moodboardUrl,
+    username: cloudUser?.username,
   });
 
   const collectionSetters = useMemo(
