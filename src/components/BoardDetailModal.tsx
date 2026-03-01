@@ -137,15 +137,45 @@ export default function BoardDetailModal({
           <>
             {/* Canvas preview */}
             <div
-              className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-t-xl"
-              style={{ backgroundColor: board.background || "#f5f5f4" }}
+              className="relative w-full overflow-hidden rounded-t-xl"
+              style={{
+                backgroundColor: board.background || "#f5f5f4",
+                aspectRatio:
+                  board.canvasWidth > 0 && board.canvasHeight > 0
+                    ? `${board.canvasWidth}/${board.canvasHeight}`
+                    : "3/4",
+              }}
             >
-              {board.thumbnailUrl ? (
-                <img
-                  src={board.thumbnailUrl}
-                  alt={board.title}
-                  className="h-full w-full object-contain"
-                />
+              {(board.canvasState ?? []).length > 0 ? (
+                board.canvasState
+                  .slice()
+                  .sort((a, b) => a.zIndex - b.zIndex)
+                  .map((ci) => {
+                    const src = board.imageMap?.[ci.imageHash]?.url;
+                    if (
+                      !src ||
+                      board.canvasWidth <= 0 ||
+                      board.canvasHeight <= 0
+                    ) {
+                      return null;
+                    }
+                    return (
+                      <img
+                        key={ci.id}
+                        src={src}
+                        alt=""
+                        className="absolute object-cover"
+                        style={{
+                          left: `${(ci.x / board.canvasWidth) * 100}%`,
+                          top: `${(ci.y / board.canvasHeight) * 100}%`,
+                          width: `${(ci.width / board.canvasWidth) * 100}%`,
+                          height: `${(ci.height / board.canvasHeight) * 100}%`,
+                          transform: `rotate(${ci.rotation}deg)`,
+                          transformOrigin: "center center",
+                        }}
+                      />
+                    );
+                  })
               ) : (
                 <span className="text-sm text-neutral-400">
                   No preview available

@@ -54,6 +54,7 @@ export async function GET(req: Request) {
         canvasState: moodboards.canvasState,
         canvasWidth: moodboards.canvasWidth,
         canvasHeight: moodboards.canvasHeight,
+        background: moodboards.background,
         creatorFid: moodboards.fid,
         editHistory: moodboards.editHistory,
         viewCount: moodboards.viewCount,
@@ -88,16 +89,18 @@ export async function GET(req: Request) {
       total = rows.length;
     }
 
-    // Get first image hash from each board for thumbnail
+    // Get all image hashes used by returned boards (for collage previews)
     const allHashes = new Set<string>();
     for (const row of rows) {
       const cs = row.canvasState as CloudCanvasImage[];
       if (cs && cs.length > 0) {
-        allHashes.add(cs[0].imageHash);
+        for (const ci of cs) {
+          allHashes.add(ci.imageHash);
+        }
       }
     }
 
-    // Fetch image URLs for thumbnails
+    // Fetch image URLs for previews
     const imageUrlMap: Record<string, string> = {};
     if (allHashes.size > 0) {
       const allImages = await db.select().from(images);
@@ -110,13 +113,29 @@ export async function GET(req: Request) {
 
     const boards = rows.map((row) => {
       const cs = row.canvasState as CloudCanvasImage[];
-      const firstHash = cs?.[0]?.imageHash;
+      const previewImages = (cs ?? [])
+        .map((ci) => ({
+          url: imageUrlMap[ci.imageHash],
+          x: ci.x,
+          y: ci.y,
+          width: ci.width,
+          height: ci.height,
+          rotation: ci.rotation,
+          zIndex: ci.zIndex,
+        }))
+        .filter((ci) => !!ci.url)
+        .sort((a, b) => a.zIndex - b.zIndex);
+
       return {
         id: row.id,
         title: row.title,
         caption: row.caption ?? "",
         categories: row.categories ?? [],
-        thumbnailUrl: firstHash ? (imageUrlMap[firstHash] ?? null) : null,
+        thumbnailUrl: previewImages[0]?.url ?? null,
+        previewImages,
+        canvasWidth: row.canvasWidth,
+        canvasHeight: row.canvasHeight,
+        background: row.background ?? "#f5f5f4",
         creatorFid: row.creatorFid,
         creatorUsername: row.username ?? "",
         creatorPfpUrl: row.pfpUrl ?? "",

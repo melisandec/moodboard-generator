@@ -23,19 +23,41 @@ interface FeedCardProps {
 }
 
 export default function FeedCard({ board, onClick }: FeedCardProps) {
+  const previewImages = (board.previewImages ?? [])
+    .slice()
+    .sort((a, b) => a.zIndex - b.zIndex);
+  const hasPreview =
+    previewImages.length > 0 && board.canvasWidth > 0 && board.canvasHeight > 0;
+
   return (
     <button
       onClick={onClick}
       className="group relative block w-full overflow-hidden rounded-lg border border-neutral-100 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-left shadow-sm transition-shadow hover:shadow-md"
     >
       {/* Thumbnail */}
-      {board.thumbnailUrl ? (
-        <img
-          src={board.thumbnailUrl}
-          alt={board.title}
-          loading="lazy"
-          className="aspect-[3/4] w-full object-cover"
-        />
+      {hasPreview ? (
+        <div
+          className="relative aspect-[3/4] w-full overflow-hidden"
+          style={{ backgroundColor: board.background || "#f5f5f4" }}
+        >
+          {previewImages.map((img, idx) => (
+            <img
+              key={`${img.url}-${idx}`}
+              src={img.url}
+              alt=""
+              loading="lazy"
+              className="absolute object-cover"
+              style={{
+                left: `${(img.x / board.canvasWidth) * 100}%`,
+                top: `${(img.y / board.canvasHeight) * 100}%`,
+                width: `${(img.width / board.canvasWidth) * 100}%`,
+                height: `${(img.height / board.canvasHeight) * 100}%`,
+                transform: `rotate(${img.rotation}deg)`,
+                transformOrigin: "center center",
+              }}
+            />
+          ))}
+        </div>
       ) : (
         <div className="flex aspect-[3/4] w-full items-center justify-center bg-neutral-100 dark:bg-neutral-700">
           <svg
@@ -78,10 +100,7 @@ export default function FeedCard({ board, onClick }: FeedCardProps) {
 
         {/* Meta row */}
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-neutral-400">
-          <span>
-            Published{" "}
-            {timeAgo(board.publishedAt ?? board.createdAt)}
-          </span>
+          <span>Published {timeAgo(board.publishedAt ?? board.createdAt)}</span>
           {board.viewCount > 0 && (
             <span className="flex items-center gap-0.5">
               <svg

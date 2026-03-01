@@ -325,6 +325,18 @@ export interface PublicBoardSummary {
   caption: string;
   categories: string[];
   thumbnailUrl: string | null;
+  previewImages: Array<{
+    url: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    zIndex: number;
+  }>;
+  canvasWidth: number;
+  canvasHeight: number;
+  background: string;
   creatorFid: string;
   creatorUsername: string;
   creatorPfpUrl: string;
