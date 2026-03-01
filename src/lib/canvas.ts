@@ -50,11 +50,24 @@ function drawTitleCaption(
   width: number,
   height: number,
   darkBg: boolean,
+  username?: string,
 ) {
   const pad = width * 0.045;
   const maxW = width - pad * 2;
   let y = height - pad * 0.5;
   const alpha = darkBg ? 0.7 : 1;
+
+  if (username) {
+    const sz = Math.round(width * 0.015);
+    ctx.font = `300 ${sz}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+    ctx.fillStyle = darkBg
+      ? `rgba(255,255,255,${alpha * 0.5})`
+      : "rgba(0,0,0,0.25)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`Made by @${username}`, pad, y);
+    y -= sz + 6;
+  }
 
   if (caption) {
     const sz = Math.round(width * 0.017);
@@ -186,6 +199,7 @@ export function renderMoodboard(
   caption: string,
   width = 1080,
   height = 1350,
+  username?: string,
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -218,7 +232,7 @@ export function renderMoodboard(
     ctx.drawImage(p.img, -p.width / 2, -p.height / 2, p.width, p.height);
     ctx.restore();
   }
-  drawTitleCaption(ctx, title, caption, width, height, false);
+  drawTitleCaption(ctx, title, caption, width, height, false, username);
   return canvas.toDataURL("image/png");
 }
 
@@ -466,6 +480,7 @@ export async function renderMoodboardToBlob(
   bgColor = "#f5f5f4",
   margin = false,
   quality = 0.85,
+  username?: string,
 ): Promise<Blob> {
   const scale = Math.min(1, 1200 / cw);
   const w = Math.round(cw * scale);
@@ -508,7 +523,7 @@ export async function renderMoodboardToBlob(
     ctx.restore();
   }
 
-  drawTitleCaption(ctx, title, caption, w, h, isDark(bgColor));
+  drawTitleCaption(ctx, title, caption, w, h, isDark(bgColor), username);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(

@@ -23,6 +23,7 @@ import {
 } from "@/lib/templates";
 import InteractiveCanvas from "./InteractiveCanvas";
 import ImageLibrary from "./ImageLibrary";
+import { FirstTimeModal } from "./FirstTimeModal";
 import { useCloud } from "./CloudProvider";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -1111,6 +1112,7 @@ export default function MoodboardGenerator() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white dark:bg-neutral-900">
+      <FirstTimeModal />
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-5 py-6">
         {/* Storage unavailable banner */}
         {!storageAvailable && (

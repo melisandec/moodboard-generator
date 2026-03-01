@@ -99,6 +99,7 @@ export function useCanvasExport(config: ExportConfig) {
           bgColor,
           imageMargin,
           0.85,
+          username,
           () =>
             renderMoodboardToBlob(
               canvasImages,
@@ -108,6 +109,8 @@ export function useCanvasExport(config: ExportConfig) {
               dimsH,
               bgColor,
               imageMargin,
+              0.85,
+              username,
             ),
         );
       } else if (moodboardUrl) {

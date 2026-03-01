@@ -23,6 +23,7 @@ export interface RenderRequest {
   margin: boolean;
   title?: string;
   caption?: string;
+  username?: string;
   quality?: number;
   /** For renderToBlob: optional scale-down (e.g. Math.min(1, 1200/cw)) */
   scale?: number;
@@ -78,11 +79,24 @@ function drawTitleCaption(
   width: number,
   height: number,
   darkBg: boolean,
+  username?: string,
 ) {
   const pad = width * 0.045;
   const maxW = width - pad * 2;
   let y = height - pad * 0.5;
   const alpha = darkBg ? 0.7 : 1;
+
+  if (username) {
+    const sz = Math.round(width * 0.015);
+    ctx.font = `300 ${sz}px sans-serif`;
+    ctx.fillStyle = darkBg
+      ? `rgba(255,255,255,${alpha * 0.5})`
+      : "rgba(0,0,0,0.25)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`Made by @${username}`, pad, y);
+    y -= sz + 6;
+  }
 
   if (caption) {
     const sz = Math.round(width * 0.017);
@@ -179,7 +193,7 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     }
 
     // Draw title/caption for full renders (not thumbnails)
-    if (req.type === "renderToBlob" && (req.title || req.caption)) {
+    if (req.type === "renderToBlob" && (req.title || req.caption || req.username)) {
       drawTitleCaption(
         ctx,
         req.title ?? "",
@@ -187,6 +201,7 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
         w,
         h,
         isDark(req.bgColor),
+        req.username,
       );
     }
 

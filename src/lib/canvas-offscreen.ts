@@ -113,6 +113,7 @@ export async function renderMoodboardToBlobOffscreen(
   bgColor: string,
   margin: boolean,
   quality: number,
+  username: string | undefined,
   /** Called when the worker is unavailable */
   mainThreadFallback: () => Promise<Blob>,
 ): Promise<Blob> {
@@ -144,6 +145,7 @@ export async function renderMoodboardToBlobOffscreen(
         margin,
         title,
         caption,
+        username,
         quality,
         scale,
       };
