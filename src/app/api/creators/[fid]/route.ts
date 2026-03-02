@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, getClient } from "@/lib/db";
 import { users, moodboards, userStats } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -32,25 +32,76 @@ export async function GET(
     const { fid } = await params;
     const db = getDb();
 
-    // Get user data
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.fid, fid))
-      .limit(1);
+    // Get user data via raw query to avoid automatic JSON parsing failures
+    const client = getClient();
 
-    if (user.length === 0) {
+    // Inspect the users table to see which columns exist (robust for older DBs)
+    const pragma = await client.execute({ sql: "PRAGMA table_info('users')" });
+    const pragmaRows = (pragma && (pragma as any).rows) || [];
+    const existingCols: string[] = pragmaRows.map((r: any) => r[1]);
+
+    const wanted = [
+      { name: "fid" },
+      { name: "username" },
+      { name: "pfp_url" },
+      { name: "bio" },
+      { name: "social_links" },
+      { name: "follower_count" },
+    ];
+
+    const selected = wanted
+      .filter((w) => existingCols.includes(w.name))
+      .map((w) => w.name)
+      .join(", ");
+
+    const sql = `SELECT ${selected} FROM users WHERE fid = ? LIMIT 1`;
+    const res = await client.execute({ sql, args: [fid] });
+    const rows = (res && (res as any).rows) || [];
+    if (rows.length === 0) {
       return NextResponse.json({ error: "Creator not found" }, { status: 404 });
     }
 
-    const userData = user[0];
+    const raw = rows[0];
+    // Map values to object by selected column names
+    const parts = selected.split(/,\s*/);
+    const userData: any = {};
+    parts.forEach((col, idx) => {
+      const prop =
+        col === "pfp_url"
+          ? "pfpUrl"
+          : col === "follower_count"
+            ? "followerCount"
+            : col;
+      userData[prop] = raw[idx];
+    });
 
-    // Get user stats
-    const stats = await db
-      .select()
-      .from(userStats)
-      .where(eq(userStats.fid, fid))
-      .limit(1);
+    // Ensure fid present
+    userData.fid = userData.fid || fid;
+
+    // Safely parse social_links if present
+    let socialLinks: Record<string, string> = {};
+    if (userData.social_links) {
+      try {
+        socialLinks = JSON.parse(userData.social_links as string);
+      } catch (e) {
+        console.warn("Failed to parse social_links for user", fid, e);
+        socialLinks = {};
+      }
+    }
+    userData.socialLinks = socialLinks;
+
+    // Get user stats (wrap in try/catch for older DBs)
+    let stats: any[] = [];
+    try {
+      stats = await db
+        .select()
+        .from(userStats)
+        .where(eq(userStats.fid, fid))
+        .limit(1);
+    } catch (e) {
+      console.warn("userStats query failed, returning defaults", e);
+      stats = [];
+    }
 
     // Get recent public boards
     const recentBoards = await db
@@ -90,6 +141,12 @@ export async function GET(
     return NextResponse.json(profile);
   } catch (error) {
     console.error("Error fetching creator profile:", error);
+    // Return error details during local debugging
+    const message = (error && (error as any).message) || String(error);
+    const stack = (error && (error as any).stack) || null;
+    if (process.env.NODE_ENV === "development") {
+      return NextResponse.json({ error: message, stack }, { status: 500 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch creator profile" },
       { status: 500 },
