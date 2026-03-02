@@ -25,6 +25,7 @@ import {
 import InteractiveCanvas from "./InteractiveCanvas";
 import ImageLibrary from "./ImageLibrary";
 import { FirstTimeModal } from "./FirstTimeModal";
+import { BoardCreationWizard } from "./BoardCreationWizard";
 import { useCloud } from "./CloudProvider";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -341,6 +342,9 @@ export default function MoodboardGenerator() {
 
   // Storage availability
   const [storageAvailable, setStorageAvailable] = useState(true);
+
+  // Board Creation Wizard
+  const [showWizard, setShowWizard] = useState(false);
 
   const {
     user: cloudUser,
@@ -925,7 +929,7 @@ export default function MoodboardGenerator() {
             </button>
             <button
               onClick={() => {
-                void saveToCollection();
+                setShowWizard(true);
               }}
               disabled={isSaving}
               className="flex min-h-[44px] items-center rounded-full border border-neutral-300 dark:border-neutral-600 px-3 text-[11px] text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 disabled:opacity-50"
@@ -1828,6 +1832,29 @@ export default function MoodboardGenerator() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Board Creation Wizard */}
+      {showWizard && (
+        <BoardCreationWizard
+          onCancel={() => setShowWizard(false)}
+          onComplete={(boardId) => {
+            setShowWizard(false);
+            // Optional: show success message or redirect to board
+            console.log("Board created:", boardId);
+          }}
+          canvasImages={canvasImages}
+          title={title}
+          caption={caption}
+          bgColor={bgColor}
+          imageMargin={imageMargin}
+          orientation={orientation}
+          categories={categories}
+          canvasWidth={dims.w}
+          canvasHeight={dims.h}
+          remixOfId={remixOfId}
+          moodboardUrl={moodboardUrl}
+        />
       )}
     </div>
   );
