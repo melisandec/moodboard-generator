@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { collectionItems, collections, moodboards, users } from "@/lib/schema";
 import { verifyAuth } from "@/lib/auth";
+import { logCollectionActivity } from "@/lib/activity-logger";
 import { eq, and } from "drizzle-orm";
 import { v4 } from "uuid";
 
@@ -107,6 +108,14 @@ export async function POST(
       createdAt: new Date(),
     });
 
+    // Log activity
+    await logCollectionActivity({
+      type: 'item_added',
+      fid,
+      collectionId,
+      details: { boardId },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Add to collection error:", error);
@@ -165,6 +174,14 @@ export async function DELETE(
           eq(collectionItems.boardId, boardId),
         ),
       );
+
+    // Log activity
+    await logCollectionActivity({
+      type: 'item_removed',
+      fid,
+      collectionId,
+      details: { boardId },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

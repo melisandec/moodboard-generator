@@ -1361,40 +1361,48 @@ export default function MoodboardGenerator() {
               Library
             </button>
             {cloudUser ? (
-              <button
-                onClick={() =>
-                  cloudSync()
-                    .then(() => refreshCollection())
-                    .catch(() => {})
-                }
-                disabled={syncStatus === "syncing"}
-                className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40"
-              >
-                {cloudUser.pfpUrl && (
-                  <img
-                    src={cloudUser.pfpUrl}
-                    alt=""
-                    className="h-4 w-4 rounded-full"
-                  />
-                )}
-                {syncStatus === "syncing" ? (
-                  <>
-                    <Spinner /> Syncing
-                  </>
-                ) : syncStatus === "synced" ? (
-                  <>
-                    <CloudSyncedIcon /> Synced
-                  </>
-                ) : syncStatus === "error" ? (
-                  <>
-                    <CloudErrorIcon /> Retry
-                  </>
-                ) : (
-                  <>
-                    <CloudIcon /> Sync
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/creators/${cloudUser.fid}`}
+                  className="flex items-center justify-center"
+                  title="View profile"
+                >
+                  {cloudUser.pfpUrl && (
+                    <img
+                      src={cloudUser.pfpUrl}
+                      alt="Profile"
+                      className="h-5 w-5 rounded-full hover:ring-2 hover:ring-neutral-300 dark:hover:ring-neutral-600 transition-all cursor-pointer"
+                    />
+                  )}
+                </a>
+                <button
+                  onClick={() =>
+                    cloudSync()
+                      .then(() => refreshCollection())
+                      .catch(() => {})
+                  }
+                  disabled={syncStatus === "syncing"}
+                  className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40"
+                >
+                  {syncStatus === "syncing" ? (
+                    <>
+                      <Spinner /> Syncing
+                    </>
+                  ) : syncStatus === "synced" ? (
+                    <>
+                      <CloudSyncedIcon /> Synced
+                    </>
+                  ) : syncStatus === "error" ? (
+                    <>
+                      <CloudErrorIcon /> Retry
+                    </>
+                  ) : (
+                    <>
+                      <CloudIcon /> Sync
+                    </>
+                  )}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => cloudSignIn().catch(() => {})}

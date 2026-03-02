@@ -18,11 +18,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Build conditions array
-    const conditions: (
-      | ReturnType<typeof eq>
-      | ReturnType<typeof and>
-      | ReturnType<typeof gte>
-    )[] = [eq(moodboards.isPublic, true)];
+    const conditions: any[] = [eq(moodboards.isPublic, true)];
 
     // Text search
     if (query) {
@@ -80,7 +76,7 @@ export async function GET(request: NextRequest) {
       })
       .from(moodboards)
       .innerJoin(users, eq(moodboards.fid, users.fid))
-      .where(and(...conditions))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(orderColumn)
       .limit(limit)
       .offset(offset);
@@ -89,7 +85,7 @@ export async function GET(request: NextRequest) {
     const totalResult = await db
       .select({ count: sql`count(*)` })
       .from(moodboards)
-      .where(and(...conditions));
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     const total = (totalResult[0]?.count as number) || 0;
 

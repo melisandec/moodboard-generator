@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { favorites, moodboards, users } from "@/lib/schema";
 import { verifyAuth } from "@/lib/auth";
+import { logCollectionActivity } from "@/lib/activity-logger";
 import { eq, and } from "drizzle-orm";
 import { v4 } from "uuid";
 
@@ -109,6 +110,14 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
     });
 
+    // Log activity
+    await logCollectionActivity({
+      type: 'favorite_added',
+      fid,
+      boardId,
+      details: {},
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Add favorite error:", error);
@@ -141,6 +150,14 @@ export async function DELETE(request: NextRequest) {
     await db
       .delete(favorites)
       .where(and(eq(favorites.fid, fid), eq(favorites.boardId, boardId)));
+
+    // Log activity
+    await logCollectionActivity({
+      type: 'favorite_removed',
+      fid,
+      boardId,
+      details: {},
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

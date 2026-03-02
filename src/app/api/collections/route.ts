@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { collections, collectionItems } from "@/lib/schema";
 import { verifyAuth } from "@/lib/auth";
+import { logCollectionActivity } from "@/lib/activity-logger";
 import { eq } from "drizzle-orm";
 import { v4 } from "uuid";
 
@@ -73,6 +74,14 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(),
     });
 
+    // Log activity
+    await logCollectionActivity({
+      type: 'collection_created',
+      fid,
+      collectionId,
+      details: { name: name.trim(), isPublic: isPublic ?? false },
+    });
+
     return NextResponse.json({
       success: true,
       collectionId,
@@ -132,6 +141,14 @@ export async function PUT(request: NextRequest) {
       })
       .where(eq(collections.id, collectionId));
 
+    // Log activity
+    await logCollectionActivity({
+      type: 'collection_updated',
+      fid,
+      collectionId,
+      details: { updatedFields: { name, description, isPublic } },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Update collection error:", error);
@@ -182,6 +199,14 @@ export async function DELETE(request: NextRequest) {
       .delete(collectionItems)
       .where(eq(collectionItems.collectionId, collectionId));
     await db.delete(collections).where(eq(collections.id, collectionId));
+
+    // Log activity
+    await logCollectionActivity({
+      type: 'collection_deleted',
+      fid,
+      collectionId,
+      details: { deletedCollectionName: collection.name },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
