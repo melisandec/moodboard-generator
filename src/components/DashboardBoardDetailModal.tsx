@@ -22,6 +22,14 @@ interface BoardImage {
   height: number;
 }
 
+interface RemixItem {
+  remixBoardId: string;
+  remixTitle: string;
+  remixPreviewUrl: string | null;
+  creatorUsername: string | null;
+  createdAt: number;
+}
+
 interface Board {
   id: string;
   title: string;
@@ -36,7 +44,7 @@ interface Board {
   updatedAt: number;
 }
 
-type DetailTab = "overview" | "history" | "gallery";
+type DetailTab = "overview" | "history" | "gallery" | "remixes";
 
 interface DashboardBoardDetailModalProps {
   board: Board | null;
@@ -82,6 +90,7 @@ export function DashboardBoardDetailModal({
   const [activeTab, setActiveTab] = useState<DetailTab>("overview");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [boardImages, setBoardImages] = useState<BoardImage[]>([]);
+  const [remixes, setRemixes] = useState<RemixItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchActivity = useCallback(async () => {
@@ -114,6 +123,20 @@ export function DashboardBoardDetailModal({
     }
   }, [board]);
 
+  const fetchRemixes = useCallback(async () => {
+    if (!board) return;
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/boards/${board.id}/remixes`);
+      const data = await response.json();
+      setRemixes(data.remixHistory || []);
+    } catch (error) {
+      console.error("Error fetching remixes:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [board]);
+
   // Fetch activity when history tab is opened
   useEffect(() => {
     if (isOpen && activeTab === "history" && board) {
@@ -127,6 +150,13 @@ export function DashboardBoardDetailModal({
       fetchImages();
     }
   }, [isOpen, activeTab, board, fetchImages]);
+
+  // Fetch remixes when remixes tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === "remixes" && board) {
+      fetchRemixes();
+    }
+  }, [isOpen, activeTab, board, fetchRemixes]);
 
   if (!isOpen || !board) return null;
 
@@ -162,20 +192,25 @@ export function DashboardBoardDetailModal({
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex border-b border-gray-200 px-6">
-          {(["overview", "history", "gallery"] as DetailTab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
-                activeTab === tab
-                  ? "text-indigo-600 border-indigo-600"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+        <div className="flex border-b border-gray-200 px-6 overflow-x-auto">
+          {(["overview", "history", "gallery", "remixes"] as DetailTab[]).map(
+            (tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
+                  activeTab === tab
+                    ? "text-indigo-600 border-indigo-600"
+                    : "text-gray-600 border-transparent hover:text-gray-900"
+                }`}
+              >
+                {tab === "overview" && "Overview"}
+                {tab === "history" && "History"}
+                {tab === "gallery" && "Gallery"}
+                {tab === "remixes" && `🔄 Remixes (${remixes.length})`}
+              </button>
+            ),
+          )}
         </div>
 
         {/* Content */}
@@ -331,6 +366,67 @@ export function DashboardBoardDetailModal({
                           <span className="text-sm">No preview</span>
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Remixes Tab - Phase 6 */}
+          {activeTab === "remixes" && (
+            <div className="px-6 py-6">
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">
+                  Loading remixes...
+                </div>
+              ) : remixes.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No remixes yet. Be the first to remix this board! 🎨
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {remixes.map((remix) => (
+                    <div
+                      key={remix.remixBoardId}
+                      className="flex gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      {/* Thumbnail */}
+                      <div className="flex-shrink-0 w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
+                        {remix.remixPreviewUrl ? (
+                          <Image
+                            src={remix.remixPreviewUrl}
+                            alt={remix.remixTitle}
+                            width={64}
+                            height={64}
+                            className="object-cover w-full h-full"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">
+                            <span className="text-xs">No preview</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900 truncate">
+                          {remix.remixTitle}
+                        </h4>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Remixed by {remix.creatorUsername || "Unknown"}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {new Date(remix.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+
+                      {/* Action */}
+                      <div className="flex-shrink-0">
+                        <button className="p-2 text-gray-400 hover:text-gray-600 transition">
+                          →
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

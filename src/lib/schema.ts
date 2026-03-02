@@ -170,6 +170,88 @@ export const activities = sqliteTable(
   ],
 );
 
+// Phase 6: User Favorites
+export const favorites = sqliteTable(
+  "favorites",
+  {
+    id: text("id").primaryKey(),
+    fid: text("fid")
+      .notNull()
+      .references(() => users.fid),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("favorites_fid_idx").on(table.fid),
+    index("favorites_board_idx").on(table.boardId),
+    index("favorites_fid_board_idx").on(table.fid, table.boardId),
+  ],
+);
+
+// Phase 6: User Collections
+export const collections = sqliteTable(
+  "collections",
+  {
+    id: text("id").primaryKey(),
+    fid: text("fid")
+      .notNull()
+      .references(() => users.fid),
+    name: text("name").notNull(),
+    description: text("description").default(""),
+    isPublic: integer("is_public", { mode: "boolean" }).default(false),
+    coverBoardId: text("cover_board_id").references(() => moodboards.id),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("collections_fid_idx").on(table.fid),
+    index("collections_public_idx").on(table.isPublic),
+  ],
+);
+
+// Phase 6: Collection Items
+export const collectionItems = sqliteTable(
+  "collection_items",
+  {
+    id: text("id").primaryKey(),
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    order: integer("order").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("collection_items_collection_idx").on(table.collectionId),
+    index("collection_items_board_idx").on(table.boardId),
+  ],
+);
+
+// Phase 6: Remix Relationships for Attribution
+export const remixRelationships = sqliteTable(
+  "remix_relationships",
+  {
+    id: text("id").primaryKey(),
+    remixBoardId: text("remix_board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    originalBoardId: text("original_board_id")
+      .notNull()
+      .references(() => moodboards.id),
+    creatorFid: text("creator_fid").references(() => users.fid),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("remix_relationships_remix_idx").on(table.remixBoardId),
+    index("remix_relationships_original_idx").on(table.originalBoardId),
+    index("remix_relationships_creator_idx").on(table.creatorFid),
+  ],
+);
+
 export interface EditHistoryEntry {
   fid: string;
   username: string;
