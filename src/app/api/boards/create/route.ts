@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { moodboards, activities } from "@/lib/schema";
+import { moodboards, activities, users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import type { CanvasImage } from "@/lib/storage";
 
 interface CreateBoardRequest {
@@ -33,6 +34,32 @@ export async function POST(req: NextRequest) {
     const fid = String(user.fid);
     const body = (await req.json()) as CreateBoardRequest;
     const db = getDb();
+
+    // Ensure user exists (create if not)
+    try {
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.fid, fid))
+        .get();
+
+      if (!existingUser) {
+        const now = new Date();
+        await db.insert(users).values({
+          fid,
+          username: "",
+          pfpUrl: "",
+          bio: "",
+          followerCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+        console.debug("✓ Created placeholder user for board creation");
+      }
+    } catch (err) {
+      console.warn("⚠ Could not ensure user exists:", err);
+      // Continue anyway - the insert will fail if needed
+    }
 
     // ====== Validation ======
     const errors: string[] = [];
