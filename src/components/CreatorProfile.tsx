@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useMemo } from "react";
 
 interface CreatorStats {
   totalBoardsPublished: number;
@@ -120,14 +121,7 @@ export default function CreatorProfile({ fid }: { fid: string }) {
               ))}
             </div>
           </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">
-              {profile.followerCount.toLocaleString()}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Followers
-            </div>
-          </div>
+          {/* followers removed - we don't support follow/unfollow in this app */}
         </div>
       </div>
 
@@ -154,6 +148,9 @@ export default function CreatorProfile({ fid }: { fid: string }) {
           </div>
         </div>
       </div>
+
+      {/* Collections */}
+      <CollectionsSection fid={fid} />
 
       {/* Recent Boards */}
       {profile.recentBoards.length > 0 && (
@@ -193,6 +190,127 @@ export default function CreatorProfile({ fid }: { fid: string }) {
           </div>
         </div>
       )}
+
+      {/* Recent Activity */}
+      <div>
+        <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">Recent Activity</h2>
+        <ActivityList activityEndpoint={`/api/creators/${fid}`} />
+      </div>
     </div>
   );
+}
+
+function ActivityList({ activityEndpoint }: { activityEndpoint: string }) {
+  const [items, setItems] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await fetch(activityEndpoint);
+        if (!res.ok) return setItems([]);
+        const data = await res.json();
+        // The creator endpoint returns `recentActivity` now when called as /api/creators/:fid
+        const list = data.recentActivity || [];
+        if (!mounted) return;
+        setItems(list);
+      } catch (e) {
+        setItems([]);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [activityEndpoint]);
+
+  if (!items) return <div className="text-gray-500">Loading activity...</div>;
+  if (items.length === 0) return <div className="text-sm text-gray-500">No recent activity.</div>;
+
+  return (
+    <ul className="space-y-3">
+      {items.map((a) => (
+        <li key={a.id} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+          <div className="text-sm text-gray-700 dark:text-gray-200">
+            <strong className="capitalize">{a.type}</strong>
+            {a.boardId ? (
+              <span> on <Link href={`/viewer/${a.boardId}`} className="font-medium">{a.boardId}</Link></span>
+            ) : null}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(a.createdAt).toLocaleString()}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CollectionsSection({ fid }: { fid: string }) {
+  const [collections, setCollections] = useState<{
+    id: string;
+    title: string;
+    boardCount: number;
+  }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchCollections = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/folders?fid=${encodeURIComponent(fid)}`);
+        if (!res.ok) {
+          setCollections([]);
+          return;
+        }
+        const data = await res.json();
+        if (!mounted) return;
+        // assume data.folders or data
+        setCollections(data.folders || data || []);
+      } catch (e) {
+        setCollections([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCollections();
+    return () => {
+      mounted = false;
+    };
+  }, [fid]);
+
+  if (loading) {
+    return (
+      <div className="py-4">
+        <div className="text-gray-500 dark:text-gray-400">Loading collections...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">Collections</h2>
+      {collections && collections.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          {collections.map((c) => (
+            <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+              <div className="font-semibold text-gray-900 dark:text-white">{c.title}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">{c.boardCount || 0} boards</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500 dark:text-gray-400">No collections found.</div>
+      )}
+    </div>
+  );
+}
+
+// Activity fetching helper - attempts to load activity for a creator or a board.
+export async function fetchCreatorActivity(fid: string) {
+  try {
+    const res = await fetch(`/api/creators/${encodeURIComponent(fid)}/activity`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
 }

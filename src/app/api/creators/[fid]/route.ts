@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, getClient } from "@/lib/db";
-import { users, moodboards, userStats } from "@/lib/schema";
-import { eq, and, desc } from "drizzle-orm";
+import {
+  users,
+  moodboards,
+  userStats,
+  folders,
+  activities,
+} from "@/lib/schema";
+import { eq, and, desc, or, inArray, sql } from "drizzle-orm";
 
 interface CreatorProfile {
   fid: string;
@@ -111,6 +117,9 @@ export async function GET(
         previewUrl: moodboards.previewUrl,
         viewCount: moodboards.viewCount,
         publishedAt: moodboards.publishedAt,
+        canvasWidth: moodboards.canvasWidth,
+        canvasHeight: moodboards.canvasHeight,
+        canvasState: moodboards.canvasState,
       })
       .from(moodboards)
       .where(
@@ -122,6 +131,89 @@ export async function GET(
       )
       .orderBy(desc(moodboards.publishedAt))
       .limit(6);
+
+    // Get all boards (public and private) for the creator
+    const allBoards = await db
+      .select({
+        id: moodboards.id,
+        title: moodboards.title,
+        previewUrl: moodboards.previewUrl,
+        viewCount: moodboards.viewCount,
+        isPublic: moodboards.isPublic,
+        publishedAt: moodboards.publishedAt,
+        createdAt: moodboards.createdAt,
+        updatedAt: moodboards.updatedAt,
+        canvasWidth: moodboards.canvasWidth,
+        canvasHeight: moodboards.canvasHeight,
+        canvasState: moodboards.canvasState,
+      })
+      .from(moodboards)
+      .where(eq(moodboards.fid, fid))
+      .orderBy(desc(moodboards.updatedAt));
+
+    // Get collections (folders) and counts
+    let collections: Array<{
+      id: string;
+      title: string;
+      description: string;
+      boardCount: number;
+    }> = [];
+    try {
+      const folderRows = await db
+        .select({
+          id: folders.id,
+          title: folders.name,
+          description: folders.description,
+        })
+        .from(folders)
+        .where(eq(folders.fid, fid));
+
+      for (const f of folderRows) {
+        let count = 0;
+        try {
+          const rowsForFolder = await db
+            .select()
+            .from(moodboards)
+            .where(eq(moodboards.folderId, f.id));
+          count = rowsForFolder.length;
+        } catch (e) {
+          count = 0;
+        }
+        collections.push({
+          id: f.id,
+          title: f.title,
+          description: f.description ?? "",
+          boardCount: count,
+        });
+      }
+    } catch (e) {
+      collections = [];
+    }
+
+    // Get recent activity for the creator: activities where fid = creator OR boardId in creator boards
+    let recentActivity: any[] = [];
+    try {
+      const boardIds = allBoards.map((b) => b.id);
+      if (boardIds.length > 0) {
+        recentActivity = await db
+          .select()
+          .from(activities)
+          .where(
+            or(eq(activities.fid, fid), inArray(activities.boardId, boardIds)),
+          )
+          .orderBy(desc(activities.createdAt))
+          .limit(50);
+      } else {
+        recentActivity = await db
+          .select()
+          .from(activities)
+          .where(eq(activities.fid, fid))
+          .orderBy(desc(activities.createdAt))
+          .limit(50);
+      }
+    } catch (e) {
+      recentActivity = [];
+    }
 
     const profile: CreatorProfile = {
       fid: userData.fid,
@@ -135,10 +227,91 @@ export async function GET(
         totalViews: stats[0]?.totalViews || 0,
         totalRemixes: stats[0]?.totalRemixes || 0,
       },
-      recentBoards: recentBoards,
+      recentBoards: recentBoards.map((b: any) => {
+        let previewImages: Array<{
+          id: string;
+          imageHash: string;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }> = [];
+        if (b.canvasState) {
+          try {
+            const stateArray =
+              typeof b.canvasState === "string"
+                ? JSON.parse(b.canvasState)
+                : b.canvasState;
+            if (Array.isArray(stateArray)) {
+              previewImages = stateArray.map((item: any) => ({
+                id: item.id,
+                imageHash: item.imageHash,
+                x: item.x,
+                y: item.y,
+                width: item.width,
+                height: item.height,
+              }));
+            }
+          } catch (e) {
+            console.warn("Failed to parse canvasState for board", b.id, e);
+          }
+        }
+        return {
+          id: b.id,
+          title: b.title,
+          previewUrl: b.previewUrl,
+          viewCount: b.viewCount,
+          publishedAt: b.publishedAt,
+          canvasWidth: b.canvasWidth,
+          canvasHeight: b.canvasHeight,
+          previewImages,
+        };
+      }),
     };
 
-    return NextResponse.json(profile);
+    // Attach collections, allBoards, and activity to response
+    const extended = {
+      ...profile,
+      collections,
+      boards: allBoards.map((b: any) => {
+        let previewImages: Array<{
+          id: string;
+          imageHash: string;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }> = [];
+        if (b.canvasState) {
+          try {
+            const stateArray =
+              typeof b.canvasState === "string"
+                ? JSON.parse(b.canvasState)
+                : b.canvasState;
+            if (Array.isArray(stateArray)) {
+              previewImages = stateArray.map((item: any) => ({
+                id: item.id,
+                imageHash: item.imageHash,
+                x: item.x,
+                y: item.y,
+                width: item.width,
+                height: item.height,
+              }));
+            }
+          } catch (e) {
+            console.warn("Failed to parse canvasState for board", b.id, e);
+          }
+        }
+        return {
+          ...b,
+          canvasWidth: b.canvasWidth,
+          canvasHeight: b.canvasHeight,
+          previewImages,
+        };
+      }),
+      recentActivity,
+    };
+    return NextResponse.json(extended);
   } catch (error) {
     console.error("Error fetching creator profile:", error);
     // Return error details during local debugging

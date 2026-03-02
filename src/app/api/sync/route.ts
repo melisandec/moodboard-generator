@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { moodboards, images } from "@/lib/schema";
+import { moodboards, images, activities } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
@@ -101,6 +101,21 @@ export async function POST(req: Request) {
           .where(eq(moodboards.id, board.id));
         saved += 1;
 
+        // Record a modification activity
+        try {
+          await db.insert(activities).values({
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            type: "modified",
+            boardId: board.id,
+            fid,
+            details: { updatedAt: incomingUpdatedAt.toISOString() },
+            createdAt: new Date(),
+          });
+        } catch (e) {
+          // non-fatal
+          console.warn("Failed to record activity for update", e);
+        }
+
         if (payload.isPublic || existing.isPublic) {
           shouldRevalidatePublicFeed = true;
         }
@@ -168,6 +183,19 @@ export async function POST(req: Request) {
           if (payload.isPublic || existingAfterConflict.isPublic) {
             shouldRevalidatePublicFeed = true;
           }
+        }
+        // Record creation activity for new board
+        try {
+          await db.insert(activities).values({
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            type: "created",
+            boardId: board.id,
+            fid,
+            details: { isPublic: !!payload.isPublic },
+            createdAt: incomingCreatedAt,
+          });
+        } catch (e) {
+          console.warn("Failed to record activity for insert", e);
         }
       }
     }

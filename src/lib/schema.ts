@@ -26,6 +26,7 @@ export const moodboards = sqliteTable(
     categories: text("categories", { mode: "json" })
       .notNull()
       .$type<string[]>(),
+    primaryCategory: text("primary_category").default("Uncategorized"), // Main category for filtering
     canvasState: text("canvas_state", { mode: "json" })
       .notNull()
       .$type<CloudCanvasImage[]>(),
@@ -41,6 +42,8 @@ export const moodboards = sqliteTable(
       .default([]),
     viewCount: integer("view_count").default(0),
     editCount: integer("edit_count").default(0),
+    remixCount: integer("remix_count").default(0), // Aggregate remix count
+    likeCount: integer("like_count").default(0), // Aggregate like count from reactions
     lastRemixAt: integer("last_remix_at", { mode: "timestamp" }),
     remixOfId: text("remix_of_id"),
     folderId: text("folder_id").references(() => folders.id),
@@ -52,6 +55,7 @@ export const moodboards = sqliteTable(
   },
   (table) => [
     index("moodboards_fid_idx").on(table.fid),
+    index("moodboards_category_idx").on(table.fid, table.primaryCategory),
     index("moodboards_updated_idx").on(table.fid, table.updatedAt),
     index("moodboards_public_idx").on(table.isPublic, table.updatedAt),
     index("moodboards_public_views_idx").on(table.isPublic, table.viewCount),
@@ -148,6 +152,23 @@ export const userStats = sqliteTable("user_stats", {
   thisMonthViews: integer("this_month_views").default(0),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
+
+export const activities = sqliteTable(
+  "activities",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(), // e.g. created, modified, remixed, viewed
+    boardId: text("board_id").references(() => moodboards.id),
+    fid: text("fid").references(() => users.fid),
+    details: text("details", { mode: "json" }).$type<Record<string, unknown>>(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [
+    index("activities_board_idx").on(t.boardId),
+    index("activities_fid_idx").on(t.fid),
+    index("activities_type_idx").on(t.type),
+  ],
+);
 
 export interface EditHistoryEntry {
   fid: string;

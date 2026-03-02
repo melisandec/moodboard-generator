@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { moodboards } from "@/lib/schema";
+import { moodboards, activities } from "@/lib/schema";
 import { eq, sql, and } from "drizzle-orm";
 import { checkOrigin, originDenied } from "@/lib/auth";
 
@@ -29,6 +29,20 @@ export async function POST(
       .update(moodboards)
       .set({ viewCount: sql`${moodboards.viewCount} + 1` })
       .where(eq(moodboards.id, id));
+
+    // Record view activity (anonymous)
+    try {
+      await db.insert(activities).values({
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        type: "viewed",
+        boardId: id,
+        fid: null,
+        details: {},
+        createdAt: new Date(),
+      });
+    } catch (e) {
+      console.warn("Failed to record view activity", e);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

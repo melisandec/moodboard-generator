@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
+    ,"backfill": "node --loader ts-node/esm scripts/backfill-activities.mjs"
   },
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.2.3",
@@ -33,5 +34,7 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+    ,
+    "ts-node": "^10.9.1"
   }
 }

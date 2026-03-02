@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { moodboards, users, images } from "@/lib/schema";
+import { moodboards, users, images, activities } from "@/lib/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
@@ -112,6 +112,20 @@ export async function POST(
       syncVersion: 1,
     });
 
+    // Record activity: new board created (remix)
+    try {
+      await db.insert(activities).values({
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        type: "created",
+        boardId: newBoardId,
+        fid,
+        details: { remixOfId: boardId },
+        createdAt: now,
+      });
+    } catch (e) {
+      console.warn("Failed to record activity for new remix", e);
+    }
+
     // Increment edit count & update lastRemixAt on original board
     await db
       .update(moodboards)
@@ -120,6 +134,20 @@ export async function POST(
         lastRemixAt: now,
       })
       .where(eq(moodboards.id, boardId));
+
+    // Record activity on original board: remixed by user
+    try {
+      await db.insert(activities).values({
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        type: "remixed",
+        boardId: boardId,
+        fid,
+        details: { newBoardId },
+        createdAt: now,
+      });
+    } catch (e) {
+      console.warn("Failed to record activity for original board remix", e);
+    }
 
     revalidateTag("public-feed", "max");
     revalidateTag(`public-board:${boardId}`, "max");
