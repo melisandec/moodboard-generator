@@ -59,18 +59,25 @@ export async function registerUser(
   user: CloudUser,
   fetchFn: FetchFn,
 ): Promise<void> {
-  const res = await fetchFn("/api/user", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: user.username, pfpUrl: user.pfpUrl }),
-  });
-  if (!res.ok) {
-    console.error(
-      "registerUser failed:",
-      res.status,
-      await res.text().catch(() => ""),
-    );
-    throw new Error("Failed to register user");
+  try {
+    const res = await fetchFn("/api/user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: user.username,
+        pfpUrl: user.pfpUrl,
+      }),
+    });
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      const errorMsg = errorBody.error || errorBody.details || res.statusText;
+      console.error("❌ registerUser failed:", res.status, errorMsg, errorBody);
+      throw new Error(`User registration failed: ${res.status} - ${errorMsg}`);
+    }
+    console.debug("✓ User registered");
+  } catch (err) {
+    console.error("❌ registerUser error:", err);
+    throw err;
   }
 }
 

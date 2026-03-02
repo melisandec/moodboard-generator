@@ -46,7 +46,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, fid });
   } catch (err) {
-    console.error("User upsert error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : "";
+    console.error("❌ User upsert error:", errorMsg);
+    console.error("Stack:", errorStack);
+    return NextResponse.json(
+      { error: "User registration failed", details: errorMsg },
+      { status: 500 },
+    );
   }
 }

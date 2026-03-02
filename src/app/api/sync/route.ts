@@ -19,7 +19,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const fid = String(auth.fid);
-    const { boards } = await req.json();
+    let boards;
+    try {
+      const body = await req.json();
+      boards = body.boards;
+    } catch (parseErr) {
+      console.error("❌ Failed to parse sync request:", parseErr);
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 },
+      );
+    }
 
     if (!Array.isArray(boards) || boards.length > 100) {
       return NextResponse.json(
@@ -104,7 +114,7 @@ export async function POST(req: Request) {
         // Record a modification activity
         try {
           await db.insert(activities).values({
-            id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: "modified",
             boardId: board.id,
             fid,
@@ -187,7 +197,7 @@ export async function POST(req: Request) {
         // Record creation activity for new board
         try {
           await db.insert(activities).values({
-            id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: "created",
             boardId: board.id,
             fid,
@@ -209,8 +219,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ saved, status: "ok" });
   } catch (err) {
-    console.error("Sync push error:", err);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : "";
+    console.error("❌ Sync push error:", errorMsg);
+    console.error("Stack:", errorStack);
+    return NextResponse.json(
+      { error: "Sync failed", details: errorMsg },
+      { status: 500 },
+    );
   }
 }
 
@@ -244,7 +260,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ boards, imageMap });
   } catch (err) {
-    console.error("Sync pull error:", err);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : "";
+    console.error("❌ Sync pull error:", errorMsg);
+    console.error("Stack:", errorStack);
+    return NextResponse.json(
+      { error: "Sync failed", details: errorMsg },
+      { status: 500 },
+    );
   }
 }

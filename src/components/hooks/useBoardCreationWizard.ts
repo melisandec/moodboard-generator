@@ -26,7 +26,7 @@ async function authFetch(
     // Fallback: manually get token
     console.debug("🔑 Getting token manually...");
     const result = await sdk.quickAuth.getToken();
-    
+
     if (result?.token) {
       console.debug("✓ Got token:", result.token.substring(0, 20) + "...");
       const headers = new Headers(init?.headers);
@@ -40,7 +40,9 @@ async function authFetch(
   }
 
   // Last resort: try without auth (will likely get 401)
-  console.warn("⚠ No auth token available - proceeding without auth (expected to fail)");
+  console.warn(
+    "⚠ No auth token available - proceeding without auth (expected to fail)",
+  );
   try {
     return await fetch(input, init);
   } catch (fetchErr) {
@@ -147,15 +149,11 @@ export function useBoardCreationWizard() {
           }),
         });
 
-        console.debug(
-          "📥 Response:",
-          response.status,
-          response.statusText,
-        );
+        console.debug("📥 Response:", response.status, response.statusText);
 
         if (!response.ok) {
           let errorMsg = `Server error: ${response.status} ${response.statusText}`;
-          
+
           try {
             const error = await response.json();
             if (error.details?.[0]) {
@@ -166,9 +164,11 @@ export function useBoardCreationWizard() {
           } catch {
             // If JSON parse fails, use status-based messages
             if (response.status === 401) {
-              errorMsg = "Authentication failed. Please open the app from Warpcast to sign in.";
+              errorMsg =
+                "Authentication failed. Please open the app from Warpcast to sign in.";
             } else if (response.status === 403) {
-              errorMsg = "Permission denied. Make sure you are signed in to Farcaster.";
+              errorMsg =
+                "Permission denied. Make sure you are signed in to Farcaster.";
             }
           }
 
