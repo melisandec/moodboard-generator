@@ -1,9 +1,28 @@
 import { useState, useCallback } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 import type { CanvasImage } from "@/lib/storage";
 
 export interface BoardWizardStep {
   step: "details" | "preview" | "publish" | "complete";
   progressPercent: number;
+}
+
+// Helper to add Farcaster auth token to fetch headers
+async function getAuthHeaders(): Promise<HeadersInit> {
+  try {
+    const { token } = await sdk.quickAuth
+      .getToken()
+      .catch(() => ({ token: null }));
+    if (token) {
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+    }
+  } catch {
+    // Token retrieval failed, fall back to no auth
+  }
+  return { "Content-Type": "application/json" };
 }
 
 export interface BoardCreationData {
@@ -92,10 +111,11 @@ export function useBoardCreationWizard() {
           return { success: false, error: errors[0] };
         }
 
-        // Create board
+        // Create board with auth token
+        const headers = await getAuthHeaders();
         const response = await fetch("/api/boards/create", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             ...data,
             isPublic: publish,
@@ -133,9 +153,10 @@ export function useBoardCreationWizard() {
       setCreationError(null);
 
       try {
+        const headers = await getAuthHeaders();
         const response = await fetch(`/api/boards/${boardId}/update`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(data),
         });
 
@@ -164,9 +185,10 @@ export function useBoardCreationWizard() {
     setCreationError(null);
 
     try {
+      const headers = await getAuthHeaders();
       const response = await fetch(`/api/boards/${boardId}/publish`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
       });
 
       if (!response.ok) {

@@ -98,7 +98,7 @@ export function BoardCreationWizard({
 
   if (step === "details") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
         <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
           <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
             Board Details
@@ -188,7 +188,7 @@ export function BoardCreationWizard({
 
   if (step === "preview") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
         <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
           <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
             Preview
@@ -215,6 +215,22 @@ export function BoardCreationWizard({
                 alt="Board preview"
                 className="w-full object-cover"
               />
+            ) : canvasImages.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1 p-2 h-48">
+                {canvasImages.slice(0, 4).map((img) => (
+                  <div
+                    key={img.id}
+                    className="relative overflow-hidden rounded bg-neutral-200 dark:bg-neutral-600"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.dataUrl}
+                      alt="Canvas preview"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="flex h-48 items-center justify-center text-neutral-400">
                 No preview available
@@ -291,7 +307,7 @@ export function BoardCreationWizard({
 
   if (step === "publish") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
         <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
           <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
             Publish Option
@@ -384,7 +400,7 @@ export function BoardCreationWizard({
 
   if (step === "complete") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
         <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 mx-auto">
             <svg
