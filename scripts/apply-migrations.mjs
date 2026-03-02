@@ -5,20 +5,20 @@ import { resolve } from "path";
 
 // Load environment variables from .env and .env.local
 function loadEnv() {
-  const envFiles = ['.env', '.env.local'];
+  const envFiles = [".env", ".env.local"];
   const cwd = process.cwd();
-  
+
   for (const file of envFiles) {
     try {
       const path = resolve(cwd, file);
-      const content = readFileSync(path, 'utf-8');
-      const lines = content.split('\n');
-      
+      const content = readFileSync(path, "utf-8");
+      const lines = content.split("\n");
+
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('#')) {
-          const [key, ...valueParts] = trimmed.split('=');
-          const value = valueParts.join('=');
+        if (trimmed && !trimmed.startsWith("#")) {
+          const [key, ...valueParts] = trimmed.split("=");
+          const value = valueParts.join("=");
           if (key && value) {
             process.env[key.trim()] = value.trim();
           }
@@ -51,7 +51,7 @@ const migrations = [
 async function runMigrations() {
   try {
     console.log("Starting database migrations...");
-    
+
     for (const migration of migrations) {
       try {
         console.log(`Executing: ${migration.substring(0, 60)}...`);
@@ -68,7 +68,7 @@ async function runMigrations() {
         }
       }
     }
-    
+
     console.log("\n✓ Database migrations complete");
   } catch (error) {
     console.error("Fatal error:", error);

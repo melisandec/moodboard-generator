@@ -110,7 +110,7 @@ export async function POST(
 
     // Log activity
     await logCollectionActivity({
-      type: 'item_added',
+      type: "item_added",
       fid,
       collectionId,
       details: { boardId },
@@ -177,7 +177,7 @@ export async function DELETE(
 
     // Log activity
     await logCollectionActivity({
-      type: 'item_removed',
+      type: "item_removed",
       fid,
       collectionId,
       details: { boardId },

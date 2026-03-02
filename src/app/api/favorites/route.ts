@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
 
     // Log activity
     await logCollectionActivity({
-      type: 'favorite_added',
+      type: "favorite_added",
       fid,
       boardId,
       details: {},
@@ -153,7 +153,7 @@ export async function DELETE(request: NextRequest) {
 
     // Log activity
     await logCollectionActivity({
-      type: 'favorite_removed',
+      type: "favorite_removed",
       fid,
       boardId,
       details: {},

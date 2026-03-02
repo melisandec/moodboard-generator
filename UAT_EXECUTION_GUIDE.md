@@ -1,6 +1,7 @@
 # User Acceptance Testing (UAT) Execution Guide
 
 ## Overview
+
 This document provides step-by-step instructions for executing comprehensive User Acceptance Testing on the Moodboard Generator dashboard improvements.
 
 **Target Environment**: Staging (https://moodboard-generator-staging.vercel.app)  
@@ -12,6 +13,7 @@ This document provides step-by-step instructions for executing comprehensive Use
 ## Test Environment Setup
 
 ### 1. Access Staging Environment
+
 ```
 URL: https://moodboard-generator-staging.vercel.app
 - Sign in with Farcaster
@@ -19,7 +21,9 @@ URL: https://moodboard-generator-staging.vercel.app
 ```
 
 ### 2. Prepare Test Data
+
 Before starting UAT:
+
 - Create 3-5 test boards with different categories
 - Ensure some boards have existing views/remixes/likes
 - Create test boards in different time periods for time-filter testing
@@ -31,7 +35,9 @@ Before starting UAT:
 ### Module 1: Search & Discovery (15 mins)
 
 #### Test 1.1: Basic Text Search
+
 **Steps**:
+
 1. Navigate to Dashboard
 2. Click on SearchBar component
 3. Type "test" in search field
@@ -41,12 +47,14 @@ Before starting UAT:
 **Expected**: ✅ Search returns relevant results within 500ms
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.2: Search by Caption
+
 **Steps**:
+
 1. Search for text that appears in board captions only
 2. Verify boards with matching captions appear
 3. Verify caption snippet visible in results
@@ -54,12 +62,14 @@ Before starting UAT:
 **Expected**: ✅ Caption search functional
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.3: Sort - Newest First
+
 **Steps**:
+
 1. Enter search query
 2. Select "Sort: Newest"
 3. Note first 3 board timestamps
@@ -68,12 +78,14 @@ Before starting UAT:
 **Expected**: ✅ Boards ordered by creation date, newest first
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.4: Sort - Most Views
+
 **Steps**:
+
 1. Search for common term
 2. Select "Sort: Views"
 3. Note view counts of top 3 results
@@ -82,12 +94,14 @@ Before starting UAT:
 **Expected**: ✅ Boards ordered by view_count, highest first
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.5: Sort - Most Remixed
+
 **Steps**:
+
 1. Execute search
 2. Select "Sort: Remixes"
 3. Verify top results have highest remix_count values
@@ -95,12 +109,14 @@ Before starting UAT:
 **Expected**: ✅ Correct sort by remix_count
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.6: Sort - Most Liked
+
 **Steps**:
+
 1. Execute search
 2. Select "Sort: Likes"
 3. Verify top results have highest like_count values
@@ -108,12 +124,14 @@ Before starting UAT:
 **Expected**: ✅ Correct sort by like_count
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.7: Time Filter - All Time
+
 **Steps**:
+
 1. Search with "All" time filter
 2. Note oldest board in results
 3. Verify boards are older than 1 year
@@ -122,12 +140,14 @@ Before starting UAT:
 **Expected**: ✅ Shows all historical boards
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.8: Time Filter - Last Week
+
 **Steps**:
+
 1. Search with "Week" time filter
 2. Note oldest board timestamp
 3. Verify all boards created within last 7 days
@@ -136,12 +156,14 @@ Before starting UAT:
 **Expected**: ✅ Only boards from last 7 days
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.9: Time Filter - Last Month
+
 **Steps**:
+
 1. Search with "Month" time filter
 2. Verify all board createdAt from last 30 days
 3. Compare result count with all-time
@@ -149,12 +171,14 @@ Before starting UAT:
 **Expected**: ✅ Only boards from last 30 days
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 1.10: Time Filter - Last Year
+
 **Steps**:
+
 1. Search with "Year" time filter
 2. Verify all boards from last 365 days
 3. Compare with all-time results
@@ -162,14 +186,16 @@ Before starting UAT:
 **Expected**: ✅ Only boards from last 365 days
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 2: Trending & Analytics (20 mins)
 
 #### Test 2.1: Trending Boards Display
+
 **Steps**:
+
 1. Navigate to Dashboard
 2. Locate Trending Boards section
 3. Verify 12 boards display in grid
@@ -179,12 +205,14 @@ Before starting UAT:
 **Expected**: ✅ Trending boards display with creator info
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 2.2: Analytics Panel Stats
+
 **Steps**:
+
 1. Open Analytics Panel
 2. Verify displays 5 key statistics:
    - Published
@@ -197,17 +225,20 @@ Before starting UAT:
 **Expected**: ✅ All 5 stats visible and populated
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
-- Published: ___
-- Views: ___
-- Remixes: ___
-- Likes: ___
-- This Month: ___
+**Notes**: ************\_************
+
+- Published: \_\_\_
+- Views: \_\_\_
+- Remixes: \_\_\_
+- Likes: \_\_\_
+- This Month: \_\_\_
 
 ---
 
 #### Test 2.3: Analytics Accuracy
+
 **Steps**:
+
 1. Open Analytics Panel
 2. Manually count published boards
 3. Compare with "Published" stat
@@ -216,12 +247,14 @@ Before starting UAT:
 **Expected**: ✅ Stats match database
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 2.4: Top Board Identification
+
 **Steps**:
+
 1. Open Analytics Panel
 2. Note top board name
 3. Query database for board with highest view_count
@@ -230,12 +263,14 @@ Before starting UAT:
 **Expected**: ✅ Top board correctly identified
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 2.5: This Month Stat
+
 **Steps**:
+
 1. Open Analytics Panel
 2. Note "This Month" value
 3. Count boards created in current month
@@ -244,14 +279,16 @@ Before starting UAT:
 **Expected**: ✅ Current month data accurate
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 3: Favorites (15 mins)
 
 #### Test 3.1: Add Favorite
+
 **Steps**:
+
 1. Navigate to board preview
 2. Click "Add to Favorites" button
 3. Verify confirmation
@@ -260,12 +297,14 @@ Before starting UAT:
 **Expected**: ✅ Board added to favorites
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 3.2: Remove Favorite
+
 **Steps**:
+
 1. Open Favorites Panel
 2. Click "Remove" on favorited board
 3. Verify removal confirmation
@@ -274,12 +313,14 @@ Before starting UAT:
 **Expected**: ✅ Board removed from favorites
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 3.3: Duplicate Favorite Prevention
+
 **Steps**:
+
 1. Add board to favorites
 2. Try to add same board again
 3. Verify error message appears
@@ -287,12 +328,14 @@ Before starting UAT:
 **Expected**: ✅ Error: "Already favorited"
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 3.4: Favorites Pagination
+
 **Steps**:
+
 1. Add 25+ boards to favorites
 2. Open Favorites Panel
 3. Verify pagination controls appear
@@ -302,12 +345,14 @@ Before starting UAT:
 **Expected**: ✅ Pagination functional with 20 per page
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 3.5: Favorites Empty State
+
 **Steps**:
+
 1. Clear all favorites (if any exist)
 2. Open Favorites Panel
 3. Verify empty state message
@@ -315,14 +360,16 @@ Before starting UAT:
 **Expected**: ✅ Empty state displays: "No favorite boards yet"
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 4: Collections (20 mins)
 
 #### Test 4.1: Create Collection
+
 **Steps**:
+
 1. Open Collections Panel
 2. Click "Create Collection"
 3. Enter name: "Test Collection 1"
@@ -333,12 +380,14 @@ Before starting UAT:
 **Expected**: ✅ Collection created and displays in list
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.2: Update Collection
+
 **Steps**:
+
 1. Click on created collection
 2. Edit name to "Updated Collection"
 3. Change to public
@@ -348,12 +397,14 @@ Before starting UAT:
 **Expected**: ✅ Collection updated successfully
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.3: Add Board to Collection
+
 **Steps**:
+
 1. Open collection
 2. Click "Add Board"
 3. Search and select a board
@@ -363,12 +414,14 @@ Before starting UAT:
 **Expected**: ✅ Board added with auto-ordering
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.4: Add Multiple Boards
+
 **Steps**:
+
 1. Add 5 boards to collection
 2. Verify all 5 display
 3. Verify order is: 1, 2, 3, 4, 5
@@ -376,12 +429,14 @@ Before starting UAT:
 **Expected**: ✅ Multiple boards track order correctly
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.5: Remove Board from Collection
+
 **Steps**:
+
 1. In collection, use context menu to remove a board
 2. Verify board removed from list
 3. Verify remaining boards reorder correctly
@@ -389,12 +444,14 @@ Before starting UAT:
 **Expected**: ✅ Board removed and reordering works
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.6: Delete Collection
+
 **Steps**:
+
 1. Create a collection with items
 2. Click delete on collection
 3. Confirm deletion
@@ -404,12 +461,14 @@ Before starting UAT:
 **Expected**: ✅ Collection and all items deleted
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.7: Collection Privacy
+
 **Steps**:
+
 1. Create public collection
 2. Get share link
 3. Open in incognito/different user
@@ -418,12 +477,14 @@ Before starting UAT:
 **Expected**: ✅ Public collections visible to others
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 4.8: Collection Privacy - Private
+
 **Steps**:
+
 1. Create private collection
 2. Try to access with different user
 3. Verify 404 or access denied
@@ -431,14 +492,16 @@ Before starting UAT:
 **Expected**: ✅ Private collections hidden from others
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 5: Remix Attribution (15 mins)
 
 #### Test 5.1: Remix Tracking
+
 **Steps**:
+
 1. Create a board (Board A)
 2. Remix Board A to create Board B
 3. Navigate to Board A details
@@ -448,12 +511,14 @@ Before starting UAT:
 **Expected**: ✅ Remix relationship tracked and visible
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 5.2: Remix Creator Attribution
+
 **Steps**:
+
 1. In remixes list
 2. Verify creator FID/username shows
 3. Verify links to creator profile or board
@@ -461,12 +526,14 @@ Before starting UAT:
 **Expected**: ✅ Creator attribution accurate
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 5.3: Multiple Remixes
+
 **Steps**:
+
 1. Create Board A
 2. Remix A twice (create B and C)
 3. In Board A remixes tab
@@ -475,12 +542,14 @@ Before starting UAT:
 **Expected**: ✅ Multiple remixes tracked correctly
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 5.4: Remix Timestamp
+
 **Steps**:
+
 1. View remixes for a board
 2. Verify timestamps are recent/accurate
 3. Verify most recent remix at top
@@ -488,14 +557,16 @@ Before starting UAT:
 **Expected**: ✅ Timestamps accurate and ordered
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 6: Activity Logging (10 mins)
 
 #### Test 6.1: Collection Activity Logging
+
 **Steps**:
+
 1. Create, update, and delete a collection
 2. Query activities table (or view activity log if exposed)
 3. Verify entries for:
@@ -506,12 +577,14 @@ Before starting UAT:
 **Expected**: ✅ All collection operations logged
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 6.2: Favorites Activity Logging
+
 **Steps**:
+
 1. Add and remove a favorite
 2. Check activities table
 3. Verify favorite_added and favorite_removed logged
@@ -519,12 +592,14 @@ Before starting UAT:
 **Expected**: ✅ Favorite operations logged
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 6.3: Items Activity Logging
+
 **Steps**:
+
 1. Add and remove items from collection
 2. Check activities
 3. Verify item_added and item_removed logged
@@ -532,14 +607,16 @@ Before starting UAT:
 **Expected**: ✅ Item operations logged
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 7: Performance (10 mins)
 
 #### Test 7.1: Search Response Time
+
 **Steps**:
+
 1. Open browser DevTools (Network tab)
 2. Execute search
 3. Note API response time
@@ -548,15 +625,18 @@ Before starting UAT:
 **Expected**: ✅ Response time < 500ms
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Response Times**: 
-- Attempt 1: ___ ms
-- Attempt 2: ___ ms
-- Attempt 3: ___ ms
+**Response Times**:
+
+- Attempt 1: \_\_\_ ms
+- Attempt 2: \_\_\_ ms
+- Attempt 3: \_\_\_ ms
 
 ---
 
 #### Test 7.2: Analytics Response Time
+
 **Steps**:
+
 1. Open DevTools Network tab
 2. Open Analytics Panel
 3. Note /api/user/analytics response time
@@ -564,12 +644,14 @@ Before starting UAT:
 **Expected**: ✅ Response time < 1000ms
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Response Time**: ___ ms
+**Response Time**: \_\_\_ ms
 
 ---
 
 #### Test 7.3: Collections Response Time
+
 **Steps**:
+
 1. DevTools Network tab
 2. Create collection
 3. Add item to collection
@@ -578,14 +660,16 @@ Before starting UAT:
 **Expected**: ✅ Collection operations < 300ms
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ### Module 8: UI/UX (10 mins)
 
 #### Test 8.1: Mobile Responsiveness
+
 **Steps**:
+
 1. Open Dashboard on mobile device (or zoom to 375px)
 2. Test all new components:
    - SearchBar
@@ -599,12 +683,14 @@ Before starting UAT:
 **Expected**: ✅ All responsive on mobile
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 8.2: Accessibility
+
 **Steps**:
+
 1. Use keyboard navigation only (Tab, Enter, Escape)
 2. Navigate through all new components
 3. Enable screen reader mode
@@ -613,12 +699,14 @@ Before starting UAT:
 **Expected**: ✅ Fully keyboard accessible
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 #### Test 8.3: Error States
+
 **Steps**:
+
 1. Try invalid operations (missing params, unauthorized)
 2. Verify error messages display
 3. Verify error messages are helpful
@@ -627,49 +715,55 @@ Before starting UAT:
 **Expected**: ✅ Graceful error handling
 
 **Test Result**: [ ] Pass [ ] Fail  
-**Notes**: _________________________
+**Notes**: ************\_************
 
 ---
 
 ## UAT Summary
 
 **Total Tests**: 51  
-**Passed**: ___  
-**Failed**: ___  
-**Pass Rate**: ___%
+**Passed**: **_  
+**Failed**: _**  
+**Pass Rate**: \_\_\_%
 
 ### Critical Issues Found
+
 (List any blocking issues)
-1. _______________________
-2. _______________________
-3. _______________________
+
+1. ***
+2. ***
+3. ***
 
 ### Non-Critical Issues Found
+
 (List nice-to-fix items)
-1. _______________________
-2. _______________________
-3. _______________________
+
+1. ***
+2. ***
+3. ***
 
 ### Recommendation
+
 [ ] ✅ **APPROVED** - Ready for production deployment  
 [ ] 🔄 **CONDITIONAL** - Ready after critical issues fixed  
 [ ] ❌ **REJECTED** - Major issues require rework
 
-**Tested By**: _______________________  
-**Date**: _______________________  
-**Notes**: _______________________
+**Tested By**: **********\_\_\_**********  
+**Date**: **********\_\_\_**********  
+**Notes**: **********\_\_\_**********
 
 ---
 
 ## Sign-Off
 
-**UAT Lead Approval**: _________________ **Date**: _______  
-**Product Owner Approval**: _________________ **Date**: _______  
-**Dev Lead Approval**: _________________ **Date**: _______
+**UAT Lead Approval**: ********\_******** **Date**: **\_\_\_**  
+**Product Owner Approval**: ********\_******** **Date**: **\_\_\_**  
+**Dev Lead Approval**: ********\_******** **Date**: **\_\_\_**
 
 ---
 
 **Next Steps After UAT**:
+
 1. Fix any critical issues found
 2. Retest fixed functionality
 3. Deploy to production

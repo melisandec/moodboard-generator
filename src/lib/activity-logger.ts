@@ -3,14 +3,20 @@
  * Integrates with the activity log system for audit trail and analytics
  */
 
-import { getDb } from '@/lib/db';
-import { activities } from '@/lib/schema';
-import { v4 } from 'uuid';
+import { getDb } from "@/lib/db";
+import { activities } from "@/lib/schema";
+import { v4 } from "uuid";
 
 interface ActivityLogOptions {
-  type: 'collection_created' | 'collection_updated' | 'collection_deleted' | 
-         'item_added' | 'item_removed' | 'favorite_added' | 'favorite_removed' |
-         'remix_created';
+  type:
+    | "collection_created"
+    | "collection_updated"
+    | "collection_deleted"
+    | "item_added"
+    | "item_removed"
+    | "favorite_added"
+    | "favorite_removed"
+    | "remix_created";
   fid: string;
   boardId?: string;
   collectionId?: string;
@@ -23,17 +29,17 @@ interface ActivityLogOptions {
 export async function logCollectionActivity(options: ActivityLogOptions) {
   try {
     const db = getDb();
-    
+
     // Map collection activities to generic activity types for compatibility
     const typeMapping: Record<string, string> = {
-      collection_created: 'modified',
-      collection_updated: 'modified',
-      collection_deleted: 'modified',
-      item_added: 'modified',
-      item_removed: 'modified',
-      favorite_added: 'liked',
-      favorite_removed: 'modified',
-      remix_created: 'remixed',
+      collection_created: "modified",
+      collection_updated: "modified",
+      collection_deleted: "modified",
+      item_added: "modified",
+      item_removed: "modified",
+      favorite_added: "liked",
+      favorite_removed: "modified",
+      remix_created: "remixed",
     };
 
     await db.insert(activities).values({
@@ -52,7 +58,7 @@ export async function logCollectionActivity(options: ActivityLogOptions) {
     console.log(`✓ Activity logged: ${options.type}`);
     return true;
   } catch (error) {
-    console.error('Failed to log activity:', error);
+    console.error("Failed to log activity:", error);
     return false;
   }
 }
@@ -60,15 +66,13 @@ export async function logCollectionActivity(options: ActivityLogOptions) {
 /**
  * Batch log multiple activities
  */
-export async function logActivitiesBatch(
-  activities: ActivityLogOptions[]
-) {
+export async function logActivitiesBatch(activities: ActivityLogOptions[]) {
   const results = await Promise.all(
-    activities.map(activity => logCollectionActivity(activity))
+    activities.map((activity) => logCollectionActivity(activity)),
   );
-  
-  const successful = results.filter(r => r).length;
+
+  const successful = results.filter((r) => r).length;
   console.log(`✓ Logged ${successful}/${activities.length} activities`);
-  
+
   return successful === activities.length;
 }

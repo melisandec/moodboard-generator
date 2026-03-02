@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Log activity
     await logCollectionActivity({
-      type: 'collection_created',
+      type: "collection_created",
       fid,
       collectionId,
       details: { name: name.trim(), isPublic: isPublic ?? false },
@@ -143,7 +143,7 @@ export async function PUT(request: NextRequest) {
 
     // Log activity
     await logCollectionActivity({
-      type: 'collection_updated',
+      type: "collection_updated",
       fid,
       collectionId,
       details: { updatedFields: { name, description, isPublic } },
@@ -202,7 +202,7 @@ export async function DELETE(request: NextRequest) {
 
     // Log activity
     await logCollectionActivity({
-      type: 'collection_deleted',
+      type: "collection_deleted",
       fid,
       collectionId,
       details: { deletedCollectionName: collection.name },
