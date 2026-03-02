@@ -155,8 +155,9 @@ export function BoardCreationWizard({
 
           {/* Error */}
           {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 dark:bg-red-900/30">
-              <p className="text-sm text-red-600 dark:text-red-400">
+            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Error</p>
+              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
                 {creationError}
               </p>
             </div>
@@ -274,8 +275,9 @@ export function BoardCreationWizard({
 
           {/* Error */}
           {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 dark:bg-red-900/30">
-              <p className="text-sm text-red-600 dark:text-red-400">
+            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Error</p>
+              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
                 {creationError}
               </p>
             </div>
@@ -365,8 +367,9 @@ export function BoardCreationWizard({
 
           {/* Error */}
           {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 dark:bg-red-900/30">
-              <p className="text-sm text-red-600 dark:text-red-400">
+            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Error</p>
+              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
                 {creationError}
               </p>
             </div>

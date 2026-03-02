@@ -7,43 +7,48 @@ export interface BoardWizardStep {
   progressPercent: number;
 }
 
-// Helper to perform authenticated fetch, similar to CloudProvider
+// Helper to perform authenticated fetch, using sdk.quickAuth.fetch when available
 async function authFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
   try {
-    const inMiniApp = await sdk.isInMiniApp().catch(() => false);
-
-    if (inMiniApp) {
-      // Try to use quickAuth.fetch which handles auth automatically
-      try {
-        return await sdk.quickAuth.fetch(input, init);
-      } catch (err) {
-        console.warn("quickAuth.fetch failed:", err);
-        // Fall through to manual token method
-      }
+    // Try sdk.quickAuth.fetch first - this handles auth automatically in Farcaster context
+    try {
+      console.debug("🔑 Attempting sdk.quickAuth.fetch...");
+      const response = await sdk.quickAuth.fetch(input, init);
+      console.debug("✓ sdk.quickAuth.fetch succeeded");
+      return response;
+    } catch (err) {
+      console.warn("⚠ sdk.quickAuth.fetch failed, trying manual token...", err);
     }
 
-    // Manual token retrieval fallback
-    try {
-      const result = await sdk.quickAuth.getToken().catch(() => ({ token: null }));
-      if (result?.token) {
-        const headers = new Headers(init?.headers);
-        headers.set("Authorization", `Bearer ${result.token}`);
-        console.debug("✓ Attached Farcaster token to request");
-        return fetch(input, { ...init, headers });
-      }
-    } catch (err) {
-      console.warn("Failed to get auth token:", err);
+    // Fallback: manually get token
+    console.debug("🔑 Getting token manually...");
+    const result = await sdk.quickAuth.getToken();
+    
+    if (result?.token) {
+      console.debug("✓ Got token:", result.token.substring(0, 20) + "...");
+      const headers = new Headers(init?.headers);
+      headers.set("Authorization", `Bearer ${result.token}`);
+      return fetch(input, { ...init, headers });
+    } else {
+      console.warn("❌ No token in result:", result);
     }
   } catch (err) {
-    console.warn("authFetch error:", err);
+    console.error("❌ authFetch error:", err);
   }
 
-  // No auth available - proceed without token
-  console.warn("⚠ No auth token available - request may fail with 401");
-  return fetch(input, init);
+  // Last resort: try without auth (will likely get 401)
+  console.warn("⚠ No auth token available - proceeding without auth (expected to fail)");
+  try {
+    return await fetch(input, init);
+  } catch (fetchErr) {
+    console.error("❌ Even basic fetch failed:", fetchErr);
+    throw new Error(
+      "Network error - check your connection and try opening the app from Warpcast",
+    );
+  }
 }
 
 export interface BoardCreationData {
@@ -149,12 +154,25 @@ export function useBoardCreationWizard() {
         );
 
         if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          const errorMsg =
-            error.details?.[0] ||
-            error.error ||
-            `Server error: ${response.status} ${response.statusText}`;
-          console.error("❌ Board creation failed:", errorMsg, error);
+          let errorMsg = `Server error: ${response.status} ${response.statusText}`;
+          
+          try {
+            const error = await response.json();
+            if (error.details?.[0]) {
+              errorMsg = error.details[0];
+            } else if (error.error) {
+              errorMsg = error.error;
+            }
+          } catch {
+            // If JSON parse fails, use status-based messages
+            if (response.status === 401) {
+              errorMsg = "Authentication failed. Please open the app from Warpcast to sign in.";
+            } else if (response.status === 403) {
+              errorMsg = "Permission denied. Make sure you are signed in to Farcaster.";
+            }
+          }
+
+          console.error("❌ Board creation failed:", errorMsg);
           setCreationError(errorMsg);
           return { success: false, error: errorMsg };
         }
