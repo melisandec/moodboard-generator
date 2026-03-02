@@ -7,22 +7,43 @@ export interface BoardWizardStep {
   progressPercent: number;
 }
 
-// Helper to add Farcaster auth token to fetch headers
-async function getAuthHeaders(): Promise<HeadersInit> {
+// Helper to perform authenticated fetch, similar to CloudProvider
+async function authFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
   try {
-    const { token } = await sdk.quickAuth
-      .getToken()
-      .catch(() => ({ token: null }));
-    if (token) {
-      return {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
+    const inMiniApp = await sdk.isInMiniApp().catch(() => false);
+
+    if (inMiniApp) {
+      // Try to use quickAuth.fetch which handles auth automatically
+      try {
+        return await sdk.quickAuth.fetch(input, init);
+      } catch (err) {
+        console.warn("quickAuth.fetch failed:", err);
+        // Fall through to manual token method
+      }
     }
-  } catch {
-    // Token retrieval failed, fall back to no auth
+
+    // Manual token retrieval fallback
+    try {
+      const result = await sdk.quickAuth.getToken().catch(() => ({ token: null }));
+      if (result?.token) {
+        const headers = new Headers(init?.headers);
+        headers.set("Authorization", `Bearer ${result.token}`);
+        console.debug("✓ Attached Farcaster token to request");
+        return fetch(input, { ...init, headers });
+      }
+    } catch (err) {
+      console.warn("Failed to get auth token:", err);
+    }
+  } catch (err) {
+    console.warn("authFetch error:", err);
   }
-  return { "Content-Type": "application/json" };
+
+  // No auth available - proceed without token
+  console.warn("⚠ No auth token available - request may fail with 401");
+  return fetch(input, init);
 }
 
 export interface BoardCreationData {
@@ -111,33 +132,42 @@ export function useBoardCreationWizard() {
           return { success: false, error: errors[0] };
         }
 
-        // Create board with auth token
-        const headers = await getAuthHeaders();
-        const response = await fetch("/api/boards/create", {
+        console.debug("📤 Creating board...");
+        const response = await authFetch("/api/boards/create", {
           method: "POST",
-          headers,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...data,
             isPublic: publish,
           }),
         });
 
+        console.debug(
+          "📥 Response:",
+          response.status,
+          response.statusText,
+        );
+
         if (!response.ok) {
-          const error = await response.json();
+          const error = await response.json().catch(() => ({}));
           const errorMsg =
-            error.details?.[0] || error.error || "Failed to create board";
+            error.details?.[0] ||
+            error.error ||
+            `Server error: ${response.status} ${response.statusText}`;
+          console.error("❌ Board creation failed:", errorMsg, error);
           setCreationError(errorMsg);
           return { success: false, error: errorMsg };
         }
 
         const result = await response.json();
+        console.debug("✅ Board created:", result.boardId);
         setCreatedBoardId(result.boardId);
 
-        // Note: Publishing is handled by the API endpoint based on isPublic flag
         return { success: true, boardId: result.boardId };
       } catch (err) {
         const errorMsg =
           err instanceof Error ? err.message : "Failed to create board";
+        console.error("❌ Error:", errorMsg, err);
         setCreationError(errorMsg);
         return { success: false, error: errorMsg };
       } finally {
@@ -153,10 +183,9 @@ export function useBoardCreationWizard() {
       setCreationError(null);
 
       try {
-        const headers = await getAuthHeaders();
-        const response = await fetch(`/api/boards/${boardId}/update`, {
+        const response = await authFetch(`/api/boards/${boardId}/update`, {
           method: "PATCH",
-          headers,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         });
 
@@ -185,10 +214,9 @@ export function useBoardCreationWizard() {
     setCreationError(null);
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`/api/boards/${boardId}/publish`, {
+      const response = await authFetch(`/api/boards/${boardId}/publish`, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) {
