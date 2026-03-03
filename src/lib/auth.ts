@@ -3,15 +3,19 @@ import { NextResponse } from "next/server";
 
 const quickAuth = createClient();
 
-// Use full URL for domain verification - include protocol
+// Get just the domain part (without protocol) for JWT verification
 const APP_DOMAIN = (() => {
-  const domain = process.env.APP_DOMAIN || process.env.NEXT_PUBLIC_APP_DOMAIN || "moodboard-generator-phi.vercel.app";
-  // Ensure we have the full URL with protocol
-  if (domain.startsWith("http://") || domain.startsWith("https://")) {
-    return domain;
+  const fullDomain = process.env.APP_DOMAIN || process.env.NEXT_PUBLIC_APP_DOMAIN || "moodboard-generator-phi.vercel.app";
+  
+  // Remove protocol if present (verifyJwt expects just domain)
+  if (fullDomain.startsWith("https://")) {
+    return fullDomain.substring(8);
   }
-  // Default to https for production domains, http for localhost
-  return domain.includes("localhost") ? `http://${domain}` : `https://${domain}`;
+  if (fullDomain.startsWith("http://")) {
+    return fullDomain.substring(7);
+  }
+  
+  return fullDomain;
 })();
 
 export async function verifyAuth(
@@ -33,9 +37,14 @@ export async function verifyAuth(
       return null;
     }
 
-    console.debug("[verifyAuth] Verifying JWT with domain:", APP_DOMAIN);
+    console.log("[verifyAuth] Attempting JWT verification", {
+      domain: APP_DOMAIN,
+      tokenLength: token.length,
+      tokenParts: token.split(".").length,
+    });
+    
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
-    console.debug(
+    console.log(
       "[verifyAuth] ✓ JWT verified successfully for FID:",
       payload.sub,
     );
@@ -43,11 +52,31 @@ export async function verifyAuth(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     const errorType = err instanceof Error ? err.constructor.name : typeof err;
+    const token = authorization?.split(" ")[1] ?? "";
+    
+    // Try to decode token payload for debugging
+    let tokenPayload = null;
+    try {
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+        tokenPayload = payload;
+      }
+    } catch {
+      // Ignore decode errors
+    }
+    
     console.error("[verifyAuth] ❌ JWT verification failed:", {
       type: errorType,
       message: errorMsg,
       domain: APP_DOMAIN,
-      tokenLength: authorization?.split(" ")[1]?.length ?? 0,
+      tokenPayload: tokenPayload ? {
+        iss: tokenPayload.iss,
+        aud: tokenPayload.aud,
+        sub: tokenPayload.sub,
+        exp: tokenPayload.exp,
+        iat: tokenPayload.iat,
+      } : "unable to decode",
       timestamp: new Date().toISOString(),
     });
     return null;
