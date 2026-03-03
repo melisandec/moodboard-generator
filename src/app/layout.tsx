@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { CloudProvider } from "@/components/CloudProvider";
-import { SDKInitializer } from "@/components/SDKInitializer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -62,7 +61,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} antialiased bg-background text-foreground`}
       >
-        <SDKInitializer />
         <CloudProvider>{children}</CloudProvider>
       </body>
     </html>
