@@ -19,16 +19,19 @@ The 500 errors on `moodboard-generator-phi.vercel.app` were caused by:
 ## Fixed Files
 
 ### 1. [src/app/api/user/route.ts](src/app/api/user/route.ts)
+
 - ✅ Added comprehensive console logging at each step
 - ✅ Better error classification (DB config vs JWT vs runtime)
 - ✅ Timing metrics for debugging
 
 ### 2. [src/app/api/boards/create/route.ts](src/app/api/boards/create/route.ts)
+
 - ✅ Added comprehensive console logging at each step
 - ✅ Better error classification and context
 - ✅ Timing metrics for debugging
 
 ### 3. [src/lib/auth.ts](src/lib/auth.ts)
+
 - ✅ Enhanced JWT verification logging
 - ✅ Better error messages for debugging
 
@@ -68,6 +71,7 @@ cat .env.local | grep PINATA
 ```
 
 Example output:
+
 ```
 TURSO_DATABASE_URL=libsql://moodboard-db-melisandec.aws-eu-west-1.turso.io
 TURSO_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9...
@@ -173,13 +177,13 @@ curl -X POST https://moodboard-generator-phi.vercel.app/api/boards/create \
 
 2. **Common Error Patterns**:
 
-   | Error Message | Cause | Fix |
-   |---|---|---|
-   | `Database URL not configured` | `TURSO_DATABASE_URL` missing | Add to Vercel env vars |
-   | `Database auth token not configured` | `TURSO_AUTH_TOKEN` missing | Add to Vercel env vars |
-   | `Database connection failed` | Wrong URL or blocked IP | Verify Turso whitelist |
-   | `Authentication token verification failed` | JWT expired or invalid | Get fresh token from app |
-   | `Unauthorized: Farcaster user required` | No Bearer token in request | Ensure `authFetch()` sends token |
+   | Error Message                              | Cause                        | Fix                              |
+   | ------------------------------------------ | ---------------------------- | -------------------------------- |
+   | `Database URL not configured`              | `TURSO_DATABASE_URL` missing | Add to Vercel env vars           |
+   | `Database auth token not configured`       | `TURSO_AUTH_TOKEN` missing   | Add to Vercel env vars           |
+   | `Database connection failed`               | Wrong URL or blocked IP      | Verify Turso whitelist           |
+   | `Authentication token verification failed` | JWT expired or invalid       | Get fresh token from app         |
+   | `Unauthorized: Farcaster user required`    | No Bearer token in request   | Ensure `authFetch()` sends token |
 
 3. **Enable Production Logs in Vercel**:
    - Go to Project Settings → Deployments
@@ -219,6 +223,7 @@ curl -X POST http://localhost:3000/api/user \
 ## Expected Behavior After Fix
 
 ### Before (with 500 errors):
+
 ```
 ❌ /api/user:1 Failed to load resource: server responded with 500
 ❌ registerUser failed: 500 User registration failed
@@ -226,6 +231,7 @@ curl -X POST http://localhost:3000/api/user \
 ```
 
 ### After (success):
+
 ```
 ✅ [/api/user] ✓ Auth verified for FID: 12345
 ✅ [/api/user] ✓ New user created successfully
@@ -239,6 +245,7 @@ curl -X POST http://localhost:3000/api/user \
 If deployment breaks the app:
 
 1. Revert the commit:
+
    ```bash
    git revert HEAD
    git push  # Auto-deploys to Vercel

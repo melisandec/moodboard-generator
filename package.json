@@ -19,6 +19,7 @@
     "@farcaster/miniapp-sdk": "^0.2.3",
     "@farcaster/quick-auth": "^0.0.8",
     "@libsql/client": "^0.17.0",
+    "@neynar/nodejs-sdk": "^3.137.0",
     "drizzle-orm": "^0.45.1",
     "next": "16.1.6",
     "react": "19.2.3",

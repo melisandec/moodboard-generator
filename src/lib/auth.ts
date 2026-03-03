@@ -22,7 +22,10 @@ export async function verifyAuth(
     const token = authorization.split(" ")[1];
     console.debug("[verifyAuth] Verifying JWT with domain:", APP_DOMAIN);
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
-    console.debug("[verifyAuth] ✓ JWT verified successfully for FID:", payload.sub);
+    console.debug(
+      "[verifyAuth] ✓ JWT verified successfully for FID:",
+      payload.sub,
+    );
     return { fid: payload.sub };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);

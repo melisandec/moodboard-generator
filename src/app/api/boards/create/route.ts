@@ -55,7 +55,10 @@ export async function POST(req: NextRequest) {
 
     // Ensure user exists (create if not)
     try {
-      console.log("[/api/boards/create] Checking for existing user with FID:", fid);
+      console.log(
+        "[/api/boards/create] Checking for existing user with FID:",
+        fid,
+      );
       const existingUser = await db
         .select()
         .from(users)
@@ -75,13 +78,18 @@ export async function POST(req: NextRequest) {
           createdAt: now,
           updatedAt: now,
         });
-        console.log("[/api/boards/create] ✓ Created placeholder user for board creation");
+        console.log(
+          "[/api/boards/create] ✓ Created placeholder user for board creation",
+        );
       } else {
         console.log("[/api/boards/create] ✓ User already exists");
       }
     } catch (err) {
       const userError = err instanceof Error ? err.message : String(err);
-      console.warn("[/api/boards/create] ⚠ Could not ensure user exists:", userError);
+      console.warn(
+        "[/api/boards/create] ⚠ Could not ensure user exists:",
+        userError,
+      );
       // Continue anyway - the insert will fail if needed
     }
 
@@ -208,11 +216,16 @@ export async function POST(req: NextRequest) {
       console.log("[/api/boards/create] ✓ Activity logged");
     } catch (_activityError) {
       // Activity logging is non-critical
-      console.debug("[/api/boards/create] ⚠ Activity logging skipped (non-critical)");
+      console.debug(
+        "[/api/boards/create] ⚠ Activity logging skipped (non-critical)",
+      );
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[/api/boards/create] ✅ SUCCESS (${duration}ms)`, { boardId, fid });
+    console.log(`[/api/boards/create] ✅ SUCCESS (${duration}ms)`, {
+      boardId,
+      fid,
+    });
 
     return NextResponse.json(
       {
@@ -228,7 +241,8 @@ export async function POST(req: NextRequest) {
     const duration = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : "";
-    const errorType = error instanceof Error ? error.constructor.name : typeof error;
+    const errorType =
+      error instanceof Error ? error.constructor.name : typeof error;
 
     console.error(`[/api/boards/create] ❌ ERROR (${duration}ms)`, {
       type: errorType,

@@ -14,7 +14,10 @@ export async function POST(req: Request) {
     });
 
     if (!checkOrigin(req)) {
-      console.warn("[/api/user] ❌ Origin check failed:", req.headers.get("origin"));
+      console.warn(
+        "[/api/user] ❌ Origin check failed:",
+        req.headers.get("origin"),
+      );
       return originDenied();
     }
 
@@ -73,7 +76,9 @@ export async function POST(req: Request) {
       console.log("[/api/user] ✓ New user created successfully");
     }
 
-    console.log(`[/api/user] ✅ SUCCESS (${Date.now() - startTime}ms)`, { fid });
+    console.log(`[/api/user] ✅ SUCCESS (${Date.now() - startTime}ms)`, {
+      fid,
+    });
     return NextResponse.json({ ok: true, fid });
   } catch (err) {
     const duration = Date.now() - startTime;
