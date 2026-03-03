@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
         orientation: body.orientation,
         margin: body.margin,
         categories: body.categories,
+        primaryCategory: body.categories?.[0] || "Uncategorized",
         isPublic: body.isPublic || false,
         previewUrl: body.previewUrl || null,
         remixOfId: body.remixOfId || null,
@@ -191,6 +192,7 @@ export async function POST(req: NextRequest) {
         editCount: 0,
         remixCount: 0,
         likeCount: 0,
+        syncVersion: 1,
       })
       .run();
     console.log("[/api/boards/create] ✓ Board inserted successfully");

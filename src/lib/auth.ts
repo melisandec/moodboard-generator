@@ -3,8 +3,16 @@ import { NextResponse } from "next/server";
 
 const quickAuth = createClient();
 
-const APP_DOMAIN =
-  process.env.APP_DOMAIN || "moodboard-generator-phi.vercel.app";
+// Use full URL for domain verification - include protocol
+const APP_DOMAIN = (() => {
+  const domain = process.env.APP_DOMAIN || process.env.NEXT_PUBLIC_APP_DOMAIN || "moodboard-generator-phi.vercel.app";
+  // Ensure we have the full URL with protocol
+  if (domain.startsWith("http://") || domain.startsWith("https://")) {
+    return domain;
+  }
+  // Default to https for production domains, http for localhost
+  return domain.includes("localhost") ? `http://${domain}` : `https://${domain}`;
+})();
 
 export async function verifyAuth(
   req: Request,
@@ -20,6 +28,11 @@ export async function verifyAuth(
 
   try {
     const token = authorization.split(" ")[1];
+    if (!token) {
+      console.warn("[verifyAuth] ⚠ Empty token after Bearer");
+      return null;
+    }
+
     console.debug("[verifyAuth] Verifying JWT with domain:", APP_DOMAIN);
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
     console.debug(
@@ -34,6 +47,7 @@ export async function verifyAuth(
       type: errorType,
       message: errorMsg,
       domain: APP_DOMAIN,
+      tokenLength: authorization?.split(" ")[1]?.length ?? 0,
       timestamp: new Date().toISOString(),
     });
     return null;
