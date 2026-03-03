@@ -5,8 +5,11 @@ const quickAuth = createClient();
 
 // Get just the domain part (without protocol) for JWT verification
 const APP_DOMAIN = (() => {
-  const fullDomain = process.env.APP_DOMAIN || process.env.NEXT_PUBLIC_APP_DOMAIN || "moodboard-generator-phi.vercel.app";
-  
+  const fullDomain =
+    process.env.APP_DOMAIN ||
+    process.env.NEXT_PUBLIC_APP_DOMAIN ||
+    "moodboard-generator-phi.vercel.app";
+
   // Remove protocol if present (verifyJwt expects just domain)
   if (fullDomain.startsWith("https://")) {
     return fullDomain.substring(8);
@@ -14,7 +17,7 @@ const APP_DOMAIN = (() => {
   if (fullDomain.startsWith("http://")) {
     return fullDomain.substring(7);
   }
-  
+
   return fullDomain;
 })();
 
@@ -42,7 +45,7 @@ export async function verifyAuth(
       tokenLength: token.length,
       tokenParts: token.split(".").length,
     });
-    
+
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
     console.log(
       "[verifyAuth] ✓ JWT verified successfully for FID:",
@@ -53,7 +56,7 @@ export async function verifyAuth(
     const errorMsg = err instanceof Error ? err.message : String(err);
     const errorType = err instanceof Error ? err.constructor.name : typeof err;
     const token = authorization?.split(" ")[1] ?? "";
-    
+
     // Try to decode token payload for debugging (safely)
     let tokenPayload = null;
     try {
@@ -66,25 +69,28 @@ export async function verifyAuth(
         if (padding !== 4) {
           decoded += "=".repeat(padding);
         }
-        const payloadStr = typeof Buffer !== 'undefined' 
-          ? Buffer.from(decoded, "base64").toString("utf8")
-          : atob(decoded);
+        const payloadStr =
+          typeof Buffer !== "undefined"
+            ? Buffer.from(decoded, "base64").toString("utf8")
+            : atob(decoded);
         tokenPayload = JSON.parse(payloadStr);
       }
     } catch {
       // Silently ignore decode errors
       tokenPayload = null;
     }
-    
+
     console.error("[verifyAuth] ❌ JWT verification failed:", {
       type: errorType,
       message: errorMsg,
       domain: APP_DOMAIN,
-      tokenPayload: tokenPayload ? {
-        iss: tokenPayload.iss,
-        aud: tokenPayload.aud,
-        sub: tokenPayload.sub,
-      } : "unable to decode",
+      tokenPayload: tokenPayload
+        ? {
+            iss: tokenPayload.iss,
+            aud: tokenPayload.aud,
+            sub: tokenPayload.sub,
+          }
+        : "unable to decode",
       timestamp: new Date().toISOString(),
     });
     return null;

@@ -103,9 +103,7 @@ export async function POST(req: Request) {
           .where(eq(users.fid, fid));
         console.log("[/api/user] ✓ User updated successfully");
       } else {
-        console.log(
-          "[/api/user] No existing user found, creating new user...",
-        );
+        console.log("[/api/user] No existing user found, creating new user...");
         const now = new Date();
         await db.insert(users).values({
           fid,
@@ -124,9 +122,7 @@ export async function POST(req: Request) {
         error: dbOpErr instanceof Error ? dbOpErr.message : String(dbOpErr),
         stack: dbOpErr instanceof Error ? dbOpErr.stack : "",
         type:
-          dbOpErr instanceof Error
-            ? dbOpErr.constructor.name
-            : typeof dbOpErr,
+          dbOpErr instanceof Error ? dbOpErr.constructor.name : typeof dbOpErr,
       });
       return NextResponse.json(
         {
@@ -178,11 +174,7 @@ export async function GET(req: Request) {
 
     const fid = String(auth.fid);
     const db = getDb();
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.fid, fid))
-      .get();
+    const user = await db.select().from(users).where(eq(users.fid, fid)).get();
 
     if (!user)
       return NextResponse.json({ error: "User not found" }, { status: 404 });

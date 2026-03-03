@@ -95,7 +95,11 @@ async function main() {
     } catch (e) {
       const msg = e.message || String(e);
       // "duplicate column name" or "already exists" are expected if re-running
-      if (msg.includes("duplicate column") || msg.includes("already exists") || msg.includes("duplicate")) {
+      if (
+        msg.includes("duplicate column") ||
+        msg.includes("already exists") ||
+        msg.includes("duplicate")
+      ) {
         console.log(`  ⊘ ${label}  (already exists, skipping)`);
         skipped++;
       } else {
@@ -106,16 +110,18 @@ async function main() {
     }
   }
 
-  console.log(`\n✅ Done: ${succeeded} applied, ${skipped} skipped, ${failed} failed`);
+  console.log(
+    `\n✅ Done: ${succeeded} applied, ${skipped} skipped, ${failed} failed`,
+  );
 
   // Verify final state
   console.log("\n=== Verifying users table ===");
   const schema = await client.execute("PRAGMA table_info(users)");
-  schema.rows.forEach(r => console.log(`  ${r.name} (${r.type})`));
+  schema.rows.forEach((r) => console.log(`  ${r.name} (${r.type})`));
 
   console.log("\n=== Verifying moodboards has folder_id ===");
   const mbSchema = await client.execute("PRAGMA table_info(moodboards)");
-  const folderCol = mbSchema.rows.find(r => r.name === "folder_id");
+  const folderCol = mbSchema.rows.find((r) => r.name === "folder_id");
   console.log(folderCol ? "  ✓ folder_id exists" : "  ✗ folder_id MISSING");
 
   // Test inserting a user with all columns
@@ -125,11 +131,23 @@ async function main() {
       sql: `INSERT INTO users (fid, username, pfp_url, bio, social_links, follower_count, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(fid) DO UPDATE SET updated_at = excluded.updated_at`,
-      args: ["test-migration-check", "test", "", "", "{}", 0, Date.now(), Date.now()],
+      args: [
+        "test-migration-check",
+        "test",
+        "",
+        "",
+        "{}",
+        0,
+        Date.now(),
+        Date.now(),
+      ],
     });
     console.log("  ✓ Full insert succeeded");
     // Clean up test row
-    await client.execute({ sql: "DELETE FROM users WHERE fid = ?", args: ["test-migration-check"] });
+    await client.execute({
+      sql: "DELETE FROM users WHERE fid = ?",
+      args: ["test-migration-check"],
+    });
     console.log("  ✓ Cleanup done");
   } catch (e) {
     console.error("  ✗ Insert test failed:", e.message);

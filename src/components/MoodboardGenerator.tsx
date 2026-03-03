@@ -346,6 +346,9 @@ export default function MoodboardGenerator() {
   // Board Creation Wizard
   const [showWizard, setShowWizard] = useState(false);
 
+  // Collection pagination – show only 4 boards initially
+  const [showAllCollection, setShowAllCollection] = useState(false);
+
   const {
     user: cloudUser,
     syncStatus,
@@ -1593,203 +1596,265 @@ export default function MoodboardGenerator() {
 
             {/* Artwork grid */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {filteredArtworks.map((aw) => (
-                <div
-                  key={aw.id}
-                  className="group relative overflow-hidden rounded-md border border-neutral-100 dark:border-neutral-700"
-                >
-                  {/* Thumbnail / preview */}
-                  <button
-                    onClick={() => loadArtworkForEditing(aw)}
-                    className="block w-full text-left"
+              {(showAllCollection
+                ? filteredArtworks
+                : filteredArtworks.slice(0, 4)
+              ).map((aw) => {
+                const sortedImages = aw.images
+                  .slice()
+                  .sort((a, b) => a.zIndex - b.zIndex);
+                const hasCanvasPreview =
+                  sortedImages.length > 0 &&
+                  aw.canvasWidth > 0 &&
+                  aw.canvasHeight > 0;
+
+                return (
+                  <div
+                    key={aw.id}
+                    className="group relative overflow-hidden rounded-md border border-neutral-100 dark:border-neutral-700"
                   >
-                    {aw.thumbnail ? (
-                      <img
-                        src={aw.thumbnail}
-                        alt={aw.title}
-                        loading="lazy"
-                        className="aspect-[3/4] w-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="flex aspect-[3/4] w-full items-center justify-center"
-                        style={{ backgroundColor: aw.bgColor || "#f5f5f4" }}
-                      >
-                        <span className="text-[10px] text-neutral-400">
-                          {aw.images.length} images
-                        </span>
-                      </div>
-                    )}
-                    <div className="px-2 py-1.5 bg-white dark:bg-neutral-800">
-                      <p className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-200">
-                        {aw.title}
-                      </p>
-                      <p className="text-[10px] text-neutral-400">
-                        {new Date(aw.updatedAt).toLocaleDateString()}
-                      </p>
-                      {(aw.categories ?? []).length > 0 && (
-                        <div className="mt-0.5 flex flex-wrap gap-0.5">
-                          {(aw.categories ?? []).slice(0, 2).map((c) => (
-                            <span
-                              key={c}
-                              className="rounded-sm bg-neutral-100 dark:bg-neutral-700 px-1 text-[8px] text-neutral-500 dark:text-neutral-400"
-                            >
-                              {c}
-                            </span>
+                    {/* Visual preview */}
+                    <button
+                      onClick={() => loadArtworkForEditing(aw)}
+                      className="block w-full text-left"
+                    >
+                      {hasCanvasPreview ? (
+                        <div
+                          className="relative aspect-[3/4] w-full overflow-hidden"
+                          style={{
+                            backgroundColor: aw.bgColor || "#f5f5f4",
+                          }}
+                        >
+                          {sortedImages.map((img, idx) => (
+                            <img
+                              key={`${img.id}-${idx}`}
+                              src={img.dataUrl}
+                              alt=""
+                              loading="lazy"
+                              className="absolute object-cover"
+                              style={{
+                                left: `${(img.x / aw.canvasWidth) * 100}%`,
+                                top: `${(img.y / aw.canvasHeight) * 100}%`,
+                                width: `${(img.width / aw.canvasWidth) * 100}%`,
+                                height: `${(img.height / aw.canvasHeight) * 100}%`,
+                                transform: `rotate(${img.rotation}deg)`,
+                                transformOrigin: "center center",
+                              }}
+                            />
                           ))}
-                          {(aw.categories ?? []).length > 2 && (
-                            <span className="text-[8px] text-neutral-400">
-                              +{(aw.categories ?? []).length - 2}
-                            </span>
-                          )}
+                        </div>
+                      ) : aw.thumbnail ? (
+                        <img
+                          src={aw.thumbnail}
+                          alt={aw.title}
+                          loading="lazy"
+                          className="aspect-[3/4] w-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="flex aspect-[3/4] w-full items-center justify-center"
+                          style={{ backgroundColor: aw.bgColor || "#f5f5f4" }}
+                        >
+                          <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1"
+                            className="text-neutral-300 dark:text-neutral-500"
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                          </svg>
                         </div>
                       )}
-                    </div>
-                  </button>
-
-                  {/* Pin indicator */}
-                  {aw.pinned && (
-                    <div className="absolute left-1.5 top-1.5 rounded-full bg-white/80 dark:bg-neutral-800/80 p-1 shadow-sm">
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="text-neutral-600 dark:text-neutral-300"
-                      >
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Public badge */}
-                  {aw.isPublic && (
-                    <div
-                      className="absolute left-1.5 rounded-full bg-blue-500/90 p-1 shadow-sm"
-                      style={{ top: aw.pinned ? "2rem" : "0.375rem" }}
-                    >
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Hover actions */}
-                  <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleVisibility(aw);
-                      }}
-                      className={`flex h-7 w-7 items-center justify-center rounded-full shadow-sm ${aw.isPublic ? "bg-blue-50 dark:bg-blue-900/40 text-blue-500" : "bg-white/90 dark:bg-neutral-800/90 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"}`}
-                      aria-label={aw.isPublic ? "Make private" : "Make public"}
-                    >
-                      <svg
-                        width="11"
-                        height="11"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        {aw.isPublic ? (
-                          <>
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                          </>
-                        ) : (
-                          <>
-                            <rect
-                              x="3"
-                              y="11"
-                              width="18"
-                              height="11"
-                              rx="2"
-                              ry="2"
-                            />
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                          </>
+                      <div className="px-2 py-1.5 bg-white dark:bg-neutral-800">
+                        <p className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-200">
+                          {aw.title}
+                        </p>
+                        <p className="text-[10px] text-neutral-400">
+                          {new Date(aw.updatedAt).toLocaleDateString()}
+                        </p>
+                        {(aw.categories ?? []).length > 0 && (
+                          <div className="mt-0.5 flex flex-wrap gap-0.5">
+                            {(aw.categories ?? []).slice(0, 2).map((c) => (
+                              <span
+                                key={c}
+                                className="rounded-sm bg-neutral-100 dark:bg-neutral-700 px-1 text-[8px] text-neutral-500 dark:text-neutral-400"
+                              >
+                                {c}
+                              </span>
+                            ))}
+                            {(aw.categories ?? []).length > 2 && (
+                              <span className="text-[8px] text-neutral-400">
+                                +{(aw.categories ?? []).length - 2}
+                              </span>
+                            )}
+                          </div>
                         )}
-                      </svg>
+                      </div>
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePinArtwork(aw);
-                      }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
-                      aria-label={aw.pinned ? "Unpin" : "Pin"}
-                    >
-                      <svg
-                        width="11"
-                        height="11"
-                        viewBox="0 0 24 24"
-                        fill={aw.pinned ? "currentColor" : "none"}
-                        stroke="currentColor"
-                        strokeWidth="1.5"
+
+                    {/* Pin indicator */}
+                    {aw.pinned && (
+                      <div className="absolute left-1.5 top-1.5 rounded-full bg-white/80 dark:bg-neutral-800/80 p-1 shadow-sm">
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="text-neutral-600 dark:text-neutral-300"
+                        >
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
+                        </svg>
+                      </div>
+                    )}
+
+                    {/* Public badge */}
+                    {aw.isPublic && (
+                      <div
+                        className="absolute left-1.5 rounded-full bg-blue-500/90 p-1 shadow-sm"
+                        style={{ top: aw.pinned ? "2rem" : "0.375rem" }}
                       >
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        duplicateArtwork(aw);
-                      }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
-                      aria-label="Duplicate"
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                      </div>
+                    )}
+
+                    {/* Hover actions */}
+                    <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility(aw);
+                        }}
+                        className={`flex h-7 w-7 items-center justify-center rounded-full shadow-sm ${aw.isPublic ? "bg-blue-50 dark:bg-blue-900/40 text-blue-500" : "bg-white/90 dark:bg-neutral-800/90 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"}`}
+                        aria-label={
+                          aw.isPublic ? "Make private" : "Make public"
+                        }
                       >
-                        <rect x="9" y="9" width="13" height="13" rx="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmDeleteArtwork(aw.id);
-                      }}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-400 shadow-sm hover:text-red-500 dark:hover:text-red-400"
-                      aria-label="Delete artwork"
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
+                        <svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          {aw.isPublic ? (
+                            <>
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </>
+                          ) : (
+                            <>
+                              <rect
+                                x="3"
+                                y="11"
+                                width="18"
+                                height="11"
+                                rx="2"
+                                ry="2"
+                              />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </>
+                          )}
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePinArtwork(aw);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
+                        aria-label={aw.pinned ? "Unpin" : "Pin"}
                       >
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
+                        <svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill={aw.pinned ? "currentColor" : "none"}
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicateArtwork(aw);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-500 shadow-sm hover:text-neutral-700 dark:hover:text-neutral-300"
+                        aria-label="Duplicate"
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="9" y="9" width="13" height="13" rx="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteArtwork(aw.id);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-neutral-800/90 text-neutral-400 shadow-sm hover:text-red-500 dark:hover:text-red-400"
+                        aria-label="Delete artwork"
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        >
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {/* Show More / Show Less button */}
+            {filteredArtworks.length > 4 && (
+              <button
+                onClick={() => setShowAllCollection((prev) => !prev)}
+                className="mt-3 w-full rounded-md border border-neutral-200 dark:border-neutral-700 py-2 text-xs text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+              >
+                {showAllCollection
+                  ? "Show Less"
+                  : `Show More (${filteredArtworks.length - 4} more)`}
+              </button>
+            )}
 
             {filteredArtworks.length === 0 && colSearch && (
               <p className="py-4 text-center text-[11px] text-neutral-400">
