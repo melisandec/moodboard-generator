@@ -11,8 +11,8 @@
     "test:integration": "node --test scripts/integration/public-feed.integration.mjs",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
-    ,"backfill": "node --loader ts-node/esm scripts/backfill-activities.mjs"
+    "db:studio": "drizzle-kit studio",
+    "backfill": "node --loader ts-node/esm scripts/backfill-activities.mjs"
   },
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.2.3",
@@ -24,17 +24,20 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "drizzle-kit": "^0.31.9",
-    "eslint": "^9",
+    "eslint": "^9.39.3",
     "eslint-config-next": "16.1.6",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^17.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
-    ,
-    "ts-node": "^10.9.1"
+    "ts-node": "^10.9.1",
+    "typescript": "^5",
+    "typescript-eslint": "^8.56.1"
   }
 }
