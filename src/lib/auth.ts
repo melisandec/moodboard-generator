@@ -54,16 +54,26 @@ export async function verifyAuth(
     const errorType = err instanceof Error ? err.constructor.name : typeof err;
     const token = authorization?.split(" ")[1] ?? "";
     
-    // Try to decode token payload for debugging
+    // Try to decode token payload for debugging (safely)
     let tokenPayload = null;
     try {
       const parts = token.split(".");
       if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
-        tokenPayload = payload;
+        // Safely decode base64 - handle both Node.js and browser environments
+        let decoded = parts[1];
+        // Add padding if needed
+        const padding = 4 - (decoded.length % 4);
+        if (padding !== 4) {
+          decoded += "=".repeat(padding);
+        }
+        const payloadStr = typeof Buffer !== 'undefined' 
+          ? Buffer.from(decoded, "base64").toString("utf8")
+          : atob(decoded);
+        tokenPayload = JSON.parse(payloadStr);
       }
     } catch {
-      // Ignore decode errors
+      // Silently ignore decode errors
+      tokenPayload = null;
     }
     
     console.error("[verifyAuth] ❌ JWT verification failed:", {
@@ -74,8 +84,6 @@ export async function verifyAuth(
         iss: tokenPayload.iss,
         aud: tokenPayload.aud,
         sub: tokenPayload.sub,
-        exp: tokenPayload.exp,
-        iat: tokenPayload.iat,
       } : "unable to decode",
       timestamp: new Date().toISOString(),
     });

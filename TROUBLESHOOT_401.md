@@ -38,16 +38,31 @@ Your **Vercel environment variables** MUST be set. Go to:
 Set these **exactly**:
 
 ```
+# Authentication & API
 APP_DOMAIN = moodboard-generator-phi.vercel.app
 NEXT_PUBLIC_APP_DOMAIN = moodboard-generator-phi.vercel.app
 NEYNAR_API_KEY = your_key_from_developer.neynar.com  
 NEXT_PUBLIC_NEYNAR_API_KEY = same_key
+
+# Database (Turso)
+TURSO_DATABASE_URL = your_turso_connection_url
+TURSO_AUTH_TOKEN = your_turso_auth_token
 ```
 
 ⚠️ **Important**: 
 - `APP_DOMAIN` should be **just the domain** (no `https://`)
 - Copy from https://developer.neynar.com/ for API keys
 - Use the **same** API key for both NEYNAR_API_KEY variables
+- Get Turso credentials from https://turso.tech/
+
+### To Get Turso Credentials:
+
+1. Go to https://turso.tech/
+2. Sign up (free tier available)
+3. Create a database named "moodboard" (or similar)
+4. In Dashboard → Database → Connection String
+5. Copy the connection URL and auth token
+6. Add to Vercel env vars above
 
 ### Step-by-Step:
 
@@ -130,8 +145,10 @@ npm run test:api https://moodboard-generator-phi.vercel.app YOUR_TOKEN
 - [ ] Go to Settings → Environment Variables
 - [ ] Set APP_DOMAIN = `moodboard-generator-phi.vercel.app`
 - [ ] Set NEXT_PUBLIC_APP_DOMAIN = `moodboard-generator-phi.vercel.app`
-- [ ] Set NEYNAR_API_KEY = `[your_key]`
-- [ ] Set NEXT_PUBLIC_NEYNAR_API_KEY = `[your_key]`
+- [ ] Set NEYNAR_API_KEY = `[your_key_from_developer.neynar.com]`
+- [ ] Set NEXT_PUBLIC_NEYNAR_API_KEY = `[same_key]`
+- [ ] **NEW**: Set TURSO_DATABASE_URL = `[your_turso_connection_url]`
+- [ ] **NEW**: Set TURSO_AUTH_TOKEN = `[your_turso_auth_token]`
 - [ ] Click Save
 - [ ] Click Redeploy
 - [ ] Wait 2-3 minutes
