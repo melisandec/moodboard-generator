@@ -1,43 +1,43 @@
-import type { Metadata, Viewport } from 'next';
-import { Geist } from 'next/font/google';
-import { CloudProvider } from '@/components/CloudProvider';
-import { SDKInitializer } from '@/components/SDKInitializer';
-import './globals.css';
+import type { Metadata, Viewport } from "next";
+import { Geist } from "next/font/google";
+import { CloudProvider } from "@/components/CloudProvider";
+import { SDKInitializer } from "@/components/SDKInitializer";
+import "./globals.css";
 
 const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
 });
 
 export const viewport: Viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#ffffff',
+  themeColor: "#ffffff",
 };
 
 export const metadata: Metadata = {
-  title: 'Moodboard Generator',
+  title: "Moodboard Generator",
   description:
-    'Create and share beautiful moodboard collages. Upload images, generate artistic layouts, and cast to Farcaster.',
+    "Create and share beautiful moodboard collages. Upload images, generate artistic layouts, and cast to Farcaster.",
   openGraph: {
-    title: 'Moodboard Generator',
-    description: 'Create and share beautiful moodboard collages on Farcaster.',
-    type: 'website',
+    title: "Moodboard Generator",
+    description: "Create and share beautiful moodboard collages on Farcaster.",
+    type: "website",
   },
   other: {
-    'fc:miniapp': JSON.stringify({
-      version: '1',
-      imageUrl: 'https://moodboard-generator-phi.vercel.app/og.png',
+    "fc:miniapp": JSON.stringify({
+      version: "1",
+      imageUrl: "https://moodboard-generator-phi.vercel.app/og.png",
       button: {
-        title: 'Create Moodboard',
+        title: "Create Moodboard",
         action: {
-          type: 'launch_frame',
-          name: 'Moodboard Generator',
-          url: 'https://moodboard-generator-phi.vercel.app',
-          splashImageUrl: 'https://moodboard-generator-phi.vercel.app/icon.png',
-          splashBackgroundColor: '#ffffff',
+          type: "launch_frame",
+          name: "Moodboard Generator",
+          url: "https://moodboard-generator-phi.vercel.app",
+          splashImageUrl: "https://moodboard-generator-phi.vercel.app/icon.png",
+          splashBackgroundColor: "#ffffff",
         },
       },
     }),
@@ -59,7 +59,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${geistSans.variable} antialiased bg-background text-foreground`}>
+      <body
+        className={`${geistSans.variable} antialiased bg-background text-foreground`}
+      >
         <SDKInitializer />
         <CloudProvider>{children}</CloudProvider>
       </body>
