@@ -11,16 +11,28 @@ export async function verifyAuth(
 ): Promise<{ fid: number } | null> {
   const authorization = req.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) {
-    console.warn("verifyAuth: no Bearer token in request");
+    console.warn(
+      "[verifyAuth] ⚠ No Bearer token in request. Authorization header:",
+      authorization ? "present but invalid format" : "missing",
+    );
     return null;
   }
 
   try {
     const token = authorization.split(" ")[1];
+    console.debug("[verifyAuth] Verifying JWT with domain:", APP_DOMAIN);
     const payload = await quickAuth.verifyJwt({ token, domain: APP_DOMAIN });
+    console.debug("[verifyAuth] ✓ JWT verified successfully for FID:", payload.sub);
     return { fid: payload.sub };
   } catch (err) {
-    console.error("verifyAuth: JWT verification failed:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorType = err instanceof Error ? err.constructor.name : typeof err;
+    console.error("[verifyAuth] ❌ JWT verification failed:", {
+      type: errorType,
+      message: errorMsg,
+      domain: APP_DOMAIN,
+      timestamp: new Date().toISOString(),
+    });
     return null;
   }
 }

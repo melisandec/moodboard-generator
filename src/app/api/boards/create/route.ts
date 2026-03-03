@@ -21,22 +21,41 @@ interface CreateBoardRequest {
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   try {
-    const user = await verifyAuth(req);
+    console.log(`[/api/boards/create] POST request started`, {
+      timestamp: new Date().toISOString(),
+      authorization: req.headers.get("authorization")?.substring(0, 20) + "...",
+    });
 
+    const user = await verifyAuth(req);
     if (!user) {
+      console.warn("[/api/boards/create] ❌ Auth verification failed");
       return NextResponse.json(
         { error: "Unauthorized: Farcaster user required" },
         { status: 401 },
       );
     }
 
+    console.log("[/api/boards/create] ✓ Auth verified for FID:", user.fid);
+
     const fid = String(user.fid);
+    console.log("[/api/boards/create] Parsing request body...");
     const body = (await req.json()) as CreateBoardRequest;
+    console.log("[/api/boards/create] Request body parsed:", {
+      title: body.title?.substring(0, 30),
+      imageCount: body.canvasState?.length,
+      orientation: body.orientation,
+      isPublic: body.isPublic,
+    });
+
+    console.log("[/api/boards/create] Initializing database connection...");
     const db = getDb();
+    console.log("[/api/boards/create] ✓ Database connection established");
 
     // Ensure user exists (create if not)
     try {
+      console.log("[/api/boards/create] Checking for existing user with FID:", fid);
       const existingUser = await db
         .select()
         .from(users)
@@ -44,6 +63,7 @@ export async function POST(req: NextRequest) {
         .get();
 
       if (!existingUser) {
+        console.log("[/api/boards/create] Creating placeholder user...");
         const now = new Date();
         await db.insert(users).values({
           fid,
@@ -55,10 +75,13 @@ export async function POST(req: NextRequest) {
           createdAt: now,
           updatedAt: now,
         });
-        console.debug("✓ Created placeholder user for board creation");
+        console.log("[/api/boards/create] ✓ Created placeholder user for board creation");
+      } else {
+        console.log("[/api/boards/create] ✓ User already exists");
       }
     } catch (err) {
-      console.warn("⚠ Could not ensure user exists:", err);
+      const userError = err instanceof Error ? err.message : String(err);
+      console.warn("[/api/boards/create] ⚠ Could not ensure user exists:", userError);
       // Continue anyway - the insert will fail if needed
     }
 
@@ -109,12 +132,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (errors.length > 0) {
+      console.warn("[/api/boards/create] ⚠ Validation errors:", errors);
       return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
     }
+
+    console.log("[/api/boards/create] ✓ All validations passed");
 
     // ====== Create Board ======
     const now = new Date();
     const boardId = `board_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log("[/api/boards/create] Generated board ID:", boardId);
 
     // Convert CanvasImage[] (with dataUrl) to storage format (imageHash placeholder)
     const canvasStateForStorage = body.canvasState.map((img) => ({
@@ -131,6 +158,7 @@ export async function POST(req: NextRequest) {
       naturalHeight: img.naturalHeight,
     }));
 
+    console.log("[/api/boards/create] Inserting board into database...");
     await db
       .insert(moodboards)
       .values({
@@ -157,9 +185,11 @@ export async function POST(req: NextRequest) {
         likeCount: 0,
       })
       .run();
+    console.log("[/api/boards/create] ✓ Board inserted successfully");
 
     // ====== Log Activity ======
     try {
+      console.log("[/api/boards/create] Logging activity...");
       await db
         .insert(activities)
         .values({
@@ -175,9 +205,14 @@ export async function POST(req: NextRequest) {
           createdAt: now,
         })
         .run();
+      console.log("[/api/boards/create] ✓ Activity logged");
     } catch (_activityError) {
       // Activity logging is non-critical
+      console.debug("[/api/boards/create] ⚠ Activity logging skipped (non-critical)");
     }
+
+    const duration = Date.now() - startTime;
+    console.log(`[/api/boards/create] ✅ SUCCESS (${duration}ms)`, { boardId, fid });
 
     return NextResponse.json(
       {
@@ -190,11 +225,35 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
-    console.error("Error creating board:", error);
+    const duration = Date.now() - startTime;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : "";
+    const errorType = error instanceof Error ? error.constructor.name : typeof error;
+
+    console.error(`[/api/boards/create] ❌ ERROR (${duration}ms)`, {
+      type: errorType,
+      message: errorMsg,
+      stack: errorStack,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Provide specific error context
+    let details = errorMsg;
+    if (errorMsg.includes("TURSO_DATABASE_URL")) {
+      details = "Database URL not configured - check Vercel env vars";
+    } else if (errorMsg.includes("TURSO_AUTH_TOKEN")) {
+      details = "Database auth token not configured - check Vercel env vars";
+    } else if (errorMsg.includes("SERVER_ERROR") || errorMsg.includes("404")) {
+      details = "Database connection failed - verify Turso database status";
+    } else if (errorMsg.includes("JWT") || errorMsg.includes("token")) {
+      details = "Authentication token verification failed";
+    }
+
     return NextResponse.json(
       {
         error: "Failed to create board",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details,
+        type: errorType,
       },
       { status: 500 },
     );

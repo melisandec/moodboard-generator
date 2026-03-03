@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:integration": "node --test scripts/integration/public-feed.integration.mjs",
+    "test:api": "node scripts/test-api.mjs",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
