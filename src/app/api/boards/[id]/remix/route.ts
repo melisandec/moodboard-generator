@@ -115,7 +115,7 @@ export async function POST(
     // Record activity: new board created (remix)
     try {
       await db.insert(activities).values({
-        id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: "created",
         boardId: newBoardId,
         fid,
@@ -138,7 +138,7 @@ export async function POST(
     // Record activity on original board: remixed by user
     try {
       await db.insert(activities).values({
-        id: `act-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: "remixed",
         boardId: boardId,
         fid,

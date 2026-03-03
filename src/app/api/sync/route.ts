@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { moodboards, images, activities } from "@/lib/schema";
+import { moodboards, images, activities, users } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAuth, checkOrigin, originDenied } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
@@ -9,6 +9,42 @@ function toDate(value: unknown, fallback = new Date()): Date {
   if (!value) return fallback;
   const d = new Date(String(value));
   return Number.isNaN(d.getTime()) ? fallback : d;
+}
+
+/** Ensure a user row exists for the given FID (auto-create if missing). */
+async function ensureUser(
+  db: ReturnType<typeof getDb>,
+  fid: string,
+): Promise<void> {
+  const existing = await db
+    .select({ fid: users.fid })
+    .from(users)
+    .where(eq(users.fid, fid))
+    .get();
+  if (existing) return;
+
+  try {
+    const now = new Date();
+    await db.insert(users).values({
+      fid,
+      username: "",
+      pfpUrl: "",
+      bio: "",
+      socialLinks: {},
+      followerCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    console.log("[sync] ✓ Auto-created user for FID:", fid);
+  } catch {
+    // Race condition: another request may have created the user concurrently
+    const check = await db
+      .select({ fid: users.fid })
+      .from(users)
+      .where(eq(users.fid, fid))
+      .get();
+    if (!check) throw new Error(`Failed to ensure user exists for FID ${fid}`);
+  }
 }
 
 export async function POST(req: Request) {
@@ -39,6 +75,10 @@ export async function POST(req: Request) {
     }
 
     const db = getDb();
+
+    // Ensure user exists before inserting boards (FK constraint on fid)
+    await ensureUser(db, fid);
+
     let saved = 0;
     let shouldRevalidatePublicFeed = false;
     const publicBoardTagIds = new Set<string>();
@@ -211,9 +251,13 @@ export async function POST(req: Request) {
     }
 
     if (shouldRevalidatePublicFeed) {
-      revalidateTag("public-feed", "max");
-      for (const boardId of publicBoardTagIds) {
-        revalidateTag(`public-board:${boardId}`, "max");
+      try {
+        revalidateTag("public-feed", "max");
+        for (const boardId of publicBoardTagIds) {
+          revalidateTag(`public-board:${boardId}`, "max");
+        }
+      } catch (revalErr) {
+        console.warn("[sync] revalidateTag failed (non-fatal):", revalErr);
       }
     }
 
