@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         username: username ?? "",
         pfpUrl: pfpUrl ?? "",
         bio: "",
-        // Let socialLinks use the schema default ({})
+        socialLinks: {},
         followerCount: 0,
         createdAt: now,
         updatedAt: now,

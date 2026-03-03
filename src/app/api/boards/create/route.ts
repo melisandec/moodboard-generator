@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
           username: "",
           pfpUrl: "",
           bio: "",
+          socialLinks: {},
           followerCount: 0,
           createdAt: now,
           updatedAt: now,

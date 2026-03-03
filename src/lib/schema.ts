@@ -7,8 +7,7 @@ export const users = sqliteTable("users", {
   bio: text("bio").default(""),
   socialLinks: text("social_links", { mode: "json" })
     .notNull()
-    .$type<Record<string, string>>()
-    .default({}),
+    .$type<Record<string, string>>(),
   followerCount: integer("follower_count").default(0),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
