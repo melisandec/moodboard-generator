@@ -86,13 +86,45 @@ async function runTests() {
   console.log(`${BLUE}========================================${RESET}\n`);
 
   log("info", "Base URL:", BASE_URL);
-  log(
-    "info",
-    "Auth Token:",
-    TOKEN
-      ? "✓ Present"
-      : "⚠ Not provided (tests will fail if endpoints require auth)",
-  );
+  
+  // Validate token format if provided
+  if (TOKEN) {
+    // Check for invalid characters (ellipsis, etc.)
+    if (TOKEN.includes("…") || TOKEN.includes("...")) {
+      log("error", "Token appears to be truncated (contains '...' or ellipsis)");
+      log("error", "Full token required for API tests");
+      log("warn", "\n📝 How to get a valid token:");
+      log("warn", "1. Open moodboard-generator in Warpcast");
+      log("warn", "2. Press F12 → Console tab");
+      log("warn", "3. Run: const response = await sdk.quickAuth.getToken(); console.log(response.token);");
+      log("warn", "4. Copy the ENTIRE output (no truncation!)");
+      log("warn", "5. Run: npm run test:api <url> <full_token>\n");
+      return;
+    }
+    
+    // Check JWT format (3 parts separated by dots)
+    const parts = TOKEN.split(".");
+    if (parts.length !== 3) {
+      log("error", `Invalid JWT format: has ${parts.length} parts (expected 3)`);
+      log("warn", "Token should be: part1.part2.part3\n");
+      return;
+    }
+    
+    // Check for suspicious characters
+    if (!/^[A-Za-z0-9_\-\.]+$/.test(TOKEN)) {
+      log("error", "Token contains invalid characters");
+      log("warn", "JWT tokens should only contain: A-Z, a-z, 0-9, -, _, .\n");
+      return;
+    }
+    
+    log("info", "Auth Token:", "✓ Valid format (JWT with 3 parts)");
+  } else {
+    log(
+      "info",
+      "Auth Token:",
+      "⚠ Not provided (tests will fail if endpoints require auth)",
+    );
+  }
   console.log();
 
   // Test 1: Health check (no auth required)
@@ -111,8 +143,9 @@ async function runTests() {
       "Skipping authenticated tests. To test /api/user and /api/boards/create:",
     );
     log("warn", "1. Open the app in Warpcast embedded browser");
-    log("warn", "2. Run: await sdk.quickAuth.getToken()");
-    log("warn", "3. Copy the token and run: npm run test:api <url> <token>\n");
+    log("warn", "2. Run: const response = await sdk.quickAuth.getToken(); console.log(response.token);");
+    log("warn", "3. Copy the ENTIRE token (all 3 parts, no truncation!)");
+    log("warn", "4. Run: npm run test:api <url> <token>\n");
     return;
   }
 
