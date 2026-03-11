@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { CanvasImage } from "@/lib/storage";
+import type { CanvasImage, ImageStyle, CropSettings } from "@/lib/storage";
+import { DEFAULT_IMAGE_STYLE } from "@/lib/storage";
 import {
   getObjectUrl,
   reconcileObjectUrls,
@@ -71,6 +72,21 @@ export default function InteractiveCanvas({
 
   // Alignment guide lines (shown during drag)
   const [guides, setGuides] = useState<GuideLine[]>([]);
+
+  // --- Crop mode ---
+  const [cropId, setCropId] = useState<string | null>(null);
+  const [cropDrag, setCropDrag] = useState<{
+    startX: number;
+    startY: number;
+    origOffsetX: number;
+    origOffsetY: number;
+  } | null>(null);
+
+  // --- Style panel ---
+  const [styleId, setStyleId] = useState<string | null>(null);
+
+  // Double-tap detection
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
 
   // Pinch-to-zoom refs
   const pinchRef = useRef<{
@@ -166,6 +182,44 @@ export default function InteractiveCanvas({
     },
     [images, onCommit, updateOne],
   );
+
+  // ---- Crop helpers ----
+
+  const updateCrop = useCallback(
+    (id: string, patch: Partial<CropSettings>) => {
+      const img = images.find((i) => i.id === id);
+      if (!img) return;
+      const prev: CropSettings = img.crop ?? { offsetX: 0, offsetY: 0, zoom: 1 };
+      updateOne(id, { crop: { ...prev, ...patch } });
+    },
+    [images, updateOne],
+  );
+
+  const updateStyle = useCallback(
+    (id: string, patch: Partial<ImageStyle>) => {
+      const img = images.find((i) => i.id === id);
+      if (!img) return;
+      onCommit?.();
+      const prev = img.style ?? {};
+      updateOne(id, { style: { ...prev, ...patch } });
+    },
+    [images, onCommit, updateOne],
+  );
+
+  const enterCropMode = useCallback(
+    (id: string) => {
+      onCommit?.();
+      setCropId(id);
+      setSelectedIds(new Set([id]));
+      setStyleId(null);
+    },
+    [onCommit],
+  );
+
+  const exitCropMode = useCallback(() => {
+    setCropId(null);
+    setCropDrag(null);
+  }, []);
 
   // ---- Batch operations ----
 
@@ -301,6 +355,32 @@ export default function InteractiveCanvas({
     };
   }, [dragState, getScale, images, onChange, canvasWidth, canvasHeight]);
 
+  // ---- Crop-mode pan drag ----
+
+  useEffect(() => {
+    if (!cropDrag || !cropId) return;
+    const onMove = (e: PointerEvent) => {
+      e.preventDefault();
+      const img = images.find((i) => i.id === cropId);
+      if (!img) return;
+      const s = getScale();
+      const dx = (e.clientX - cropDrag.startX) / s;
+      const dy = (e.clientY - cropDrag.startY) / s;
+      const zoom = img.crop?.zoom ?? 1;
+      // Convert px delta to normalised offset (fraction of image dimension)
+      const newOffsetX = clampOffset(cropDrag.origOffsetX + dx / (img.width * zoom));
+      const newOffsetY = clampOffset(cropDrag.origOffsetY + dy / (img.height * zoom));
+      updateCrop(cropId, { offsetX: newOffsetX, offsetY: newOffsetY });
+    };
+    const onUp = () => setCropDrag(null);
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [cropDrag, cropId, images, getScale, updateCrop]);
+
   // ---- Pointer down (multi-select + long-press) ----
 
   const handlePointerDown = useCallback(
@@ -309,6 +389,34 @@ export default function InteractiveCanvas({
       e.stopPropagation();
       const img = images.find((i) => i.id === id);
       if (!img) return;
+
+      // ---- Double-tap detection → enter crop mode ----
+      const now = Date.now();
+      if (
+        lastTapRef.current &&
+        lastTapRef.current.id === id &&
+        now - lastTapRef.current.time < 350
+      ) {
+        lastTapRef.current = null;
+        enterCropMode(id);
+        return;
+      }
+      lastTapRef.current = { id, time: now };
+
+      // ---- If in crop mode, start crop-pan drag ----
+      if (cropId === id) {
+        const crop = img.crop ?? { offsetX: 0, offsetY: 0, zoom: 1 };
+        setCropDrag({
+          startX: e.clientX,
+          startY: e.clientY,
+          origOffsetX: crop.offsetX,
+          origOffsetY: crop.offsetY,
+        });
+        return;
+      }
+
+      // Exit crop mode if tapping another image
+      if (cropId && cropId !== id) exitCropMode();
 
       const additive = e.shiftKey || e.metaKey;
 
@@ -368,7 +476,7 @@ export default function InteractiveCanvas({
         });
       }
     },
-    [images, bringToFront, onCommit, selectedIds],
+    [images, bringToFront, onCommit, selectedIds, cropId, enterCropMode, exitCropMode],
   );
 
   // ---- Pinch-to-zoom gesture ----
@@ -450,7 +558,7 @@ export default function InteractiveCanvas({
   // ---- Keyboard shortcuts (Delete/Backspace, Escape) ----
 
   useEffect(() => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 && !cropId) return;
     const handler = (e: KeyboardEvent) => {
       if (
         e.target instanceof HTMLInputElement ||
@@ -458,6 +566,8 @@ export default function InteractiveCanvas({
       )
         return;
       if (e.key === "Escape") {
+        if (cropId) { exitCropMode(); return; }
+        if (styleId) { setStyleId(null); return; }
         setSelectedIds(new Set());
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -467,7 +577,7 @@ export default function InteractiveCanvas({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedIds, batchDelete, remove]);
+  }, [selectedIds, batchDelete, remove, cropId, exitCropMode, styleId]);
 
   // Reconcile Object URL cache
   useEffect(() => {
@@ -509,34 +619,71 @@ export default function InteractiveCanvas({
         backgroundColor: bgColor,
       }}
       onPointerDown={(e) => {
-        if (e.target === containerRef.current) setSelectedIds(new Set());
+        if (e.target === containerRef.current) {
+          setSelectedIds(new Set());
+          if (cropId) exitCropMode();
+          if (styleId) setStyleId(null);
+        }
       }}
     >
-      {sorted.map((img) => (
-        <div
-          key={img.id}
-          className={`absolute select-none ${
-            img.pinned ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-          } ${selectedIds.has(img.id) ? "ring-2 ring-blue-400/50 ring-offset-1" : ""}`}
-          style={{
-            left: `${(img.x / canvasWidth) * 100}%`,
-            top: `${(img.y / canvasHeight) * 100}%`,
-            width: `${(img.width / canvasWidth) * 100}%`,
-            height: `${(img.height / canvasHeight) * 100}%`,
-            zIndex: img.zIndex,
-            transform: `rotate(${img.rotation}deg)`,
-            boxShadow: marginPx > 0 ? `0 0 0 ${marginPx}px white` : "none",
-          }}
-          onPointerDown={(e) => handlePointerDown(e, img.id)}
-        >
-          <img
-            src={getObjectUrl(img.id, img.dataUrl)}
-            alt=""
-            className="pointer-events-none h-full w-full object-cover"
-            draggable={false}
-          />
-          {img.pinned && !selectedIds.has(img.id) && <PinIndicator />}
-          {selectedIds.size > 1 && selectedIds.has(img.id) && (
+      {sorted.map((img) => {
+        const s = img.style ?? {};
+        const m = { ...DEFAULT_IMAGE_STYLE, ...s };
+        const crop = img.crop ?? { offsetX: 0, offsetY: 0, zoom: 1 };
+        const borderR =
+          (m.borderRadius / 100) *
+          Math.min(img.width, img.height) /
+          2;
+        const isCropping = cropId === img.id;
+        const hasShadow = m.shadowBlur > 0 || m.shadowOffsetX !== 0 || m.shadowOffsetY !== 0;
+
+        // Build box shadow: margin border + per-image drop shadow
+        const shadows: string[] = [];
+        if (marginPx > 0) shadows.push(`0 0 0 ${marginPx}px white`);
+        if (hasShadow) shadows.push(`${m.shadowOffsetX}px ${m.shadowOffsetY}px ${m.shadowBlur}px ${m.shadowColor}`);
+        const boxShadow = shadows.length > 0 ? shadows.join(", ") : "none";
+
+        return (
+          <div
+            key={img.id}
+            className={`absolute select-none ${
+              isCropping
+                ? "cursor-move ring-2 ring-amber-400 ring-offset-1"
+                : img.pinned
+                  ? "cursor-default"
+                  : "cursor-grab active:cursor-grabbing"
+            } ${!isCropping && selectedIds.has(img.id) ? "ring-2 ring-blue-400/50 ring-offset-1" : ""}`}
+            style={{
+              left: `${(img.x / canvasWidth) * 100}%`,
+              top: `${(img.y / canvasHeight) * 100}%`,
+              width: `${(img.width / canvasWidth) * 100}%`,
+              height: `${(img.height / canvasHeight) * 100}%`,
+              zIndex: img.zIndex,
+              transform: `rotate(${img.rotation}deg)`,
+              borderRadius: borderR > 0 ? `${(borderR / img.width) * 100}% / ${(borderR / img.height) * 100}%` : undefined,
+              border: m.borderWidth > 0 ? `${m.borderWidth}px solid ${m.borderColor}` : undefined,
+              boxShadow,
+              opacity: m.opacity,
+              overflow: "hidden",
+            }}
+            onPointerDown={(e) => handlePointerDown(e, img.id)}
+          >
+            <img
+              src={getObjectUrl(img.id, img.dataUrl)}
+              alt=""
+              className="pointer-events-none"
+              draggable={false}
+              style={{
+                width: `${crop.zoom * 100}%`,
+                height: `${crop.zoom * 100}%`,
+                objectFit: "cover",
+                transform: `translate(${crop.offsetX * 100}%, ${crop.offsetY * 100}%)`,
+                marginLeft: `${-((crop.zoom - 1) / 2) * 100}%`,
+                marginTop: `${-((crop.zoom - 1) / 2) * 100}%`,
+              }}
+            />
+            {img.pinned && !selectedIds.has(img.id) && !isCropping && <PinIndicator />}
+            {selectedIds.size > 1 && selectedIds.has(img.id) && (
             <div className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 shadow-sm">
               <svg
                 width="10"
@@ -553,7 +700,59 @@ export default function InteractiveCanvas({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
+
+      {/* Crop mode toolbar */}
+      {cropId && (() => {
+        const cropImg = images.find((i) => i.id === cropId);
+        if (!cropImg) return null;
+        const crop = cropImg.crop ?? { offsetX: 0, offsetY: 0, zoom: 1 };
+        return (
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 right-0"
+            style={{ zIndex: topZ + 2 }}
+          >
+            <div
+              className="pointer-events-auto mx-auto mb-2 flex w-fit items-center gap-2 rounded-xl bg-white dark:bg-neutral-800 px-3 py-2 shadow-lg"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">Crop</span>
+              <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
+              {/* Zoom slider */}
+              <label className="flex items-center gap-1.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.05"
+                  value={crop.zoom}
+                  onChange={(e) => updateCrop(cropId, { zoom: parseFloat(e.target.value) })}
+                  className="h-1 w-16 cursor-pointer accent-amber-500"
+                />
+                <span className="w-7 text-right">{crop.zoom.toFixed(1)}×</span>
+              </label>
+              <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
+              {/* Reset */}
+              <button
+                onClick={() => updateCrop(cropId, { offsetX: 0, offsetY: 0, zoom: 1 })}
+                className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              >
+                Reset
+              </button>
+              <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
+              {/* Done */}
+              <button
+                onClick={exitCropMode}
+                className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-medium text-white hover:bg-amber-600"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Alignment guide lines overlay */}
       {guides.length > 0 && (
@@ -715,6 +914,32 @@ export default function InteractiveCanvas({
 
                 <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
 
+                {/* Crop */}
+                <button
+                  onClick={() => enterCropMode(singleSelected.id)}
+                  className={tbBtn}
+                  aria-label="Crop"
+                  title="Double-tap image to crop"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M6 2v4H2M18 22v-4h4M2 6h16a2 2 0 0 1 2 2v8M22 18H6a2 2 0 0 1-2-2V8" />
+                  </svg>
+                </button>
+
+                {/* Style */}
+                <button
+                  onClick={() => setStyleId(styleId === singleSelected.id ? null : singleSelected.id)}
+                  className={`${tbBtn} ${styleId === singleSelected.id ? "!bg-neutral-100 dark:!bg-neutral-700 !text-neutral-700 dark:!text-neutral-200" : ""}`}
+                  aria-label="Style"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+
+                <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
+
                 {/* Delete */}
                 <button
                   onClick={() => remove(singleSelected.id)}
@@ -738,6 +963,89 @@ export default function InteractiveCanvas({
             </div>
           );
         })()}
+
+      {/* Per-image style panel */}
+      {styleId && singleSelected && styleId === singleSelected.id && (() => {
+        const st = { ...DEFAULT_IMAGE_STYLE, ...singleSelected.style };
+        const sliderCls = "h-1 w-full cursor-pointer accent-blue-500";
+        const labelCls = "text-[10px] text-neutral-500 dark:text-neutral-400";
+        const valCls = "text-[10px] text-neutral-600 dark:text-neutral-300 w-8 text-right tabular-nums";
+        return (
+          <div
+            className="pointer-events-none absolute left-0 right-0"
+            style={{
+              zIndex: topZ + 3,
+              top: `${((singleSelected.y + singleSelected.height) / canvasHeight) * 100}%`,
+            }}
+          >
+            <div
+              className="pointer-events-auto mx-auto mt-12 w-64 rounded-xl bg-white dark:bg-neutral-800 p-3 shadow-lg"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-medium text-neutral-600 dark:text-neutral-300">Image Style</span>
+                <button onClick={() => setStyleId(null)} className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">✕</button>
+              </div>
+
+              {/* Border Radius */}
+              <div className="mb-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={labelCls}>Roundness</span>
+                  <span className={valCls}>{st.borderRadius}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" min="0" max="50" step="1" value={st.borderRadius} onChange={(e) => updateStyle(singleSelected.id, { borderRadius: parseInt(e.target.value) })} className={sliderCls} aria-label="Border radius" />
+                  <div className="flex gap-1">
+                    {[0, 8, 50].map((v) => (
+                      <button key={v} onClick={() => updateStyle(singleSelected.id, { borderRadius: v })} className={`h-5 w-5 rounded border text-[8px] ${st.borderRadius === v ? "border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" : "border-neutral-200 dark:border-neutral-600 text-neutral-400"}`}>
+                        {v === 0 ? "▢" : v === 8 ? "▣" : "●"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Border */}
+              <div className="mb-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={labelCls}>Border</span>
+                  <span className={valCls}>{st.borderWidth}px</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" min="0" max="8" step="1" value={st.borderWidth} onChange={(e) => updateStyle(singleSelected.id, { borderWidth: parseInt(e.target.value) })} className={sliderCls} aria-label="Border width" />
+                  <input type="color" value={st.borderColor} onChange={(e) => updateStyle(singleSelected.id, { borderColor: e.target.value })} className="h-5 w-5 cursor-pointer rounded border border-neutral-200 dark:border-neutral-600" aria-label="Border color" />
+                </div>
+              </div>
+
+              {/* Shadow */}
+              <div className="mb-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={labelCls}>Shadow</span>
+                  <span className={valCls}>{st.shadowBlur}px</span>
+                </div>
+                <input type="range" min="0" max="30" step="1" value={st.shadowBlur} onChange={(e) => updateStyle(singleSelected.id, { shadowBlur: parseInt(e.target.value) })} className={sliderCls} aria-label="Shadow blur" />
+              </div>
+
+              {/* Opacity */}
+              <div className="mb-1">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={labelCls}>Opacity</span>
+                  <span className={valCls}>{Math.round(st.opacity * 100)}%</span>
+                </div>
+                <input type="range" min="0.1" max="1" step="0.05" value={st.opacity} onChange={(e) => updateStyle(singleSelected.id, { opacity: parseFloat(e.target.value) })} className={sliderCls} aria-label="Opacity" />
+              </div>
+
+              {/* Reset */}
+              <button
+                onClick={() => updateStyle(singleSelected.id, DEFAULT_IMAGE_STYLE)}
+                className="mt-1 text-[10px] text-neutral-400 underline underline-offset-2 hover:text-neutral-600 dark:hover:text-neutral-300"
+              >
+                Reset to default
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Multi-select batch toolbar */}
       {selectedIds.size > 1 && (
@@ -894,4 +1202,9 @@ export default function InteractiveCanvas({
       )}
     </div>
   );
+}
+
+/** Clamp a normalised pan offset so the image doesn't leave the frame */
+function clampOffset(v: number): number {
+  return Math.max(-0.5, Math.min(0.5, v));
 }

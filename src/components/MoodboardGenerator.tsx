@@ -1036,7 +1036,15 @@ export default function MoodboardGenerator() {
             onClick={() => setShowLayoutPicker(true)}
             className="flex h-8 items-center gap-1 rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="4" rx="1" />
               <rect x="14" y="10" width="7" height="7" rx="1" />

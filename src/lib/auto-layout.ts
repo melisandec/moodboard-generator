@@ -318,12 +318,13 @@ function scatterLayout(
   padding: number,
 ): CanvasImage[] {
   const n = images.length;
-  const baseSize = Math.min(width, height) * (n <= 3 ? 0.38 : n <= 6 ? 0.3 : 0.24);
+  const baseSize =
+    Math.min(width, height) * (n <= 3 ? 0.38 : n <= 6 ? 0.3 : 0.24);
 
   return images.map((img, i) => {
     const aspect = safeAspect(img);
     // Vary sizes slightly
-    const sizeFactor = 0.8 + (hashIndex(i, n) * 0.4);
+    const sizeFactor = 0.8 + hashIndex(i, n) * 0.4;
     const w = baseSize * sizeFactor;
     const h = w / aspect;
 
@@ -336,7 +337,7 @@ function scatterLayout(
     const cy = height / 2 + Math.sin(angle) * radius;
 
     // Slight random-looking rotation based on index
-    const rotation = ((hashIndex(i, 7) - 0.5) * 8);
+    const rotation = (hashIndex(i, 7) - 0.5) * 8;
 
     return {
       ...img,
@@ -372,7 +373,10 @@ function rowsLayout(
   for (const img of images) {
     const aspect = safeAspect(img);
     const itemW = maxRowH * aspect;
-    if (currentRow.length > 0 && currentRowWidth + itemW + padding > usableWidth) {
+    if (
+      currentRow.length > 0 &&
+      currentRowWidth + itemW + padding > usableWidth
+    ) {
       rows.push(currentRow);
       currentRow = [];
       currentRowWidth = 0;

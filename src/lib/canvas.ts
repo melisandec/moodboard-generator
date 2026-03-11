@@ -1,4 +1,5 @@
-import type { CanvasImage, EditHistoryEntry } from "./storage";
+import type { CanvasImage, EditHistoryEntry, ImageStyle, CropSettings } from "./storage";
+import { DEFAULT_IMAGE_STYLE } from "./storage";
 
 interface Placement {
   img: HTMLImageElement;
@@ -463,6 +464,117 @@ function loadImageFromUrl(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/**
+ * Draw one image on a 2D canvas context with crop, border-radius, border,
+ * shadow and opacity applied.
+ *
+ * @param ctx  Canvas rendering context
+ * @param el   Loaded HTMLImageElement
+ * @param im   The CanvasImage metadata (position, size, rotation, crop, style)
+ * @param x    Left edge in canvas px (already scaled if needed)
+ * @param y    Top edge in canvas px
+ * @param w    Width in canvas px
+ * @param h    Height in canvas px
+ * @param marginPx  White-border margin (0 if disabled)
+ */
+function drawStyledImage(
+  ctx: CanvasRenderingContext2D,
+  el: HTMLImageElement,
+  im: CanvasImage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  marginPx: number,
+) {
+  const st: ImageStyle = { ...DEFAULT_IMAGE_STYLE, ...im.style };
+  const crop: CropSettings = im.crop ?? { offsetX: 0, offsetY: 0, zoom: 1 };
+
+  ctx.save();
+
+  // --- translate & rotate around centre ---
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate((im.rotation * Math.PI) / 180);
+
+  // --- opacity ---
+  ctx.globalAlpha = st.opacity;
+
+  // --- shadow (applied to the next fill / stroke / drawImage) ---
+  if (st.shadowBlur > 0 || st.shadowOffsetX !== 0 || st.shadowOffsetY !== 0) {
+    ctx.shadowOffsetX = st.shadowOffsetX;
+    ctx.shadowOffsetY = st.shadowOffsetY;
+    ctx.shadowBlur = st.shadowBlur;
+    ctx.shadowColor = st.shadowColor;
+  }
+
+  // Half-dimensions for drawing relative to centre
+  const hw = w / 2;
+  const hh = h / 2;
+
+  // Border radius in px
+  const borderR =
+    (st.borderRadius / 100) * Math.min(w, h) / 2;
+
+  // Build a rounded-rect path used for clipping and border
+  const buildRoundedRect = () => {
+    const r = Math.min(borderR, hw, hh);
+    ctx.beginPath();
+    ctx.moveTo(-hw + r, -hh);
+    ctx.lineTo(hw - r, -hh);
+    ctx.arcTo(hw, -hh, hw, -hh + r, r);
+    ctx.lineTo(hw, hh - r);
+    ctx.arcTo(hw, hh, hw - r, hh, r);
+    ctx.lineTo(-hw + r, hh);
+    ctx.arcTo(-hw, hh, -hw, hh - r, r);
+    ctx.lineTo(-hw, -hh + r);
+    ctx.arcTo(-hw, -hh, -hw + r, -hh, r);
+    ctx.closePath();
+  };
+
+  // --- white margin background (drawn before clipping so shadow applies) ---
+  if (marginPx > 0) {
+    buildRoundedRect();
+    ctx.fillStyle = "#ffffff";
+    // Slightly wider rect behind the image for the margin
+    ctx.save();
+    ctx.scale(
+      (w + marginPx * 2) / w,
+      (h + marginPx * 2) / h,
+    );
+    buildRoundedRect();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // --- clip to rounded rect ---
+  buildRoundedRect();
+  // The shadow has been applied above; reset before clip so it doesn't
+  // re-apply to every internal draw call.
+  ctx.shadowColor = "transparent";
+  ctx.save();
+  ctx.clip();
+
+  // --- draw the cropped image ---
+  // Crop works like CSS: zoom scales the image larger, then offsets pan.
+  const imgW = w * crop.zoom;
+  const imgH = h * crop.zoom;
+  const imgX = -hw + (crop.offsetX * imgW) - ((crop.zoom - 1) / 2) * w;
+  const imgY = -hh + (crop.offsetY * imgH) - ((crop.zoom - 1) / 2) * h;
+  ctx.drawImage(el, imgX, imgY, imgW, imgH);
+
+  ctx.restore(); // unclip
+
+  // --- border ---
+  if (st.borderWidth > 0) {
+    buildRoundedRect();
+    ctx.strokeStyle = st.borderColor;
+    ctx.lineWidth = st.borderWidth;
+    ctx.stroke();
+  }
+
+  ctx.restore(); // undo translate/rotate/alpha
+}
+
 export async function renderManualMoodboard(
   images: CanvasImage[],
   title: string,
@@ -490,20 +602,7 @@ export async function renderManualMoodboard(
   const borderPx = margin ? Math.max(2, cw * 0.003) : 0;
 
   for (const im of sorted) {
-    ctx.save();
-    ctx.translate(im.x + im.width / 2, im.y + im.height / 2);
-    ctx.rotate((im.rotation * Math.PI) / 180);
-    if (borderPx > 0) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(
-        -im.width / 2 - borderPx,
-        -im.height / 2 - borderPx,
-        im.width + borderPx * 2,
-        im.height + borderPx * 2,
-      );
-    }
-    ctx.drawImage(im.el, -im.width / 2, -im.height / 2, im.width, im.height);
-    ctx.restore();
+    drawStyledImage(ctx, im.el, im, im.x, im.y, im.width, im.height, borderPx);
   }
 
   drawTitleCaption(
@@ -552,24 +651,11 @@ export async function renderMoodboardToBlob(
   const borderPx = margin ? Math.max(2, w * 0.003) : 0;
 
   for (const im of sorted) {
-    ctx.save();
     const sx = im.x * scale;
     const sy = im.y * scale;
     const sw = im.width * scale;
     const sh = im.height * scale;
-    ctx.translate(sx + sw / 2, sy + sh / 2);
-    ctx.rotate((im.rotation * Math.PI) / 180);
-    if (borderPx > 0) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(
-        -sw / 2 - borderPx,
-        -sh / 2 - borderPx,
-        sw + borderPx * 2,
-        sh + borderPx * 2,
-      );
-    }
-    ctx.drawImage(im.el, -sw / 2, -sh / 2, sw, sh);
-    ctx.restore();
+    drawStyledImage(ctx, im.el, im, sx, sy, sw, sh, borderPx);
   }
 
   drawTitleCaption(

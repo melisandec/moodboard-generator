@@ -1,3 +1,34 @@
+export interface CropSettings {
+  /** Pan offset within frame – 0 means centred, range roughly -1 to 1 */
+  offsetX: number;
+  offsetY: number;
+  /** 1.0 = fit-to-frame, >1 = zoomed in */
+  zoom: number;
+}
+
+export interface ImageStyle {
+  /** Border radius as percentage of shorter side: 0 = square, 50 = circle */
+  borderRadius: number;
+  borderWidth: number;
+  borderColor: string;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowBlur: number;
+  shadowColor: string;
+  opacity: number;
+}
+
+export const DEFAULT_IMAGE_STYLE: ImageStyle = {
+  borderRadius: 0,
+  borderWidth: 0,
+  borderColor: "#000000",
+  shadowOffsetX: 0,
+  shadowOffsetY: 0,
+  shadowBlur: 0,
+  shadowColor: "rgba(0,0,0,0.3)",
+  opacity: 1,
+};
+
 export interface CanvasImage {
   id: string;
   dataUrl: string;
@@ -10,6 +41,8 @@ export interface CanvasImage {
   zIndex: number;
   naturalWidth: number;
   naturalHeight: number;
+  crop?: CropSettings;
+  style?: Partial<ImageStyle>;
 }
 
 /** Same shape as CanvasImage but without the heavy dataUrl blob. */
