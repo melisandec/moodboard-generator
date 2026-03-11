@@ -7,6 +7,7 @@ import {
   reconcileObjectUrls,
   releaseAllObjectUrls,
 } from "@/lib/object-url-cache";
+import { snapToGuides, type GuideLine } from "@/lib/alignment";
 
 interface Props {
   images: CanvasImage[];
@@ -67,6 +68,9 @@ export default function InteractiveCanvas({
     startY: number;
     origPositions: Map<string, { x: number; y: number }>;
   } | null>(null);
+
+  // Alignment guide lines (shown during drag)
+  const [guides, setGuides] = useState<GuideLine[]>([]);
 
   // Pinch-to-zoom refs
   const pinchRef = useRef<{
@@ -240,6 +244,37 @@ export default function InteractiveCanvas({
       const s = getScale();
       const dx = (e.clientX - dragState.startX) / s;
       const dy = (e.clientY - dragState.startY) / s;
+
+      // Single-image drag → apply snap-to-guide logic
+      const draggedIds = [...dragState.origPositions.keys()];
+      const isSingleDrag = draggedIds.length === 1;
+
+      if (isSingleDrag) {
+        const id = draggedIds[0];
+        const orig = dragState.origPositions.get(id)!;
+        const img = images.find((i) => i.id === id);
+        if (img) {
+          const rawX = orig.x + dx;
+          const rawY = orig.y + dy;
+          const otherImages = images.filter((i) => i.id !== id);
+          const snap = snapToGuides(
+            { x: rawX, y: rawY, width: img.width, height: img.height },
+            otherImages,
+            canvasWidth,
+            canvasHeight,
+          );
+          setGuides(snap.guides);
+          onChange(
+            images.map((i) =>
+              i.id === id ? { ...i, x: snap.x, y: snap.y } : i,
+            ),
+          );
+          return;
+        }
+      }
+
+      // Multi-image drag – no snapping, just move
+      setGuides([]);
       onChange(
         images.map((img) => {
           const orig = dragState.origPositions.get(img.id);
@@ -254,6 +289,7 @@ export default function InteractiveCanvas({
         clearTimeout(longPressRef.current.timer);
         longPressRef.current = null;
       }
+      setGuides([]);
       setDragState(null);
     };
 
@@ -263,7 +299,7 @@ export default function InteractiveCanvas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [dragState, getScale, images, onChange]);
+  }, [dragState, getScale, images, onChange, canvasWidth, canvasHeight]);
 
   // ---- Pointer down (multi-select + long-press) ----
 
@@ -518,6 +554,44 @@ export default function InteractiveCanvas({
           )}
         </div>
       ))}
+
+      {/* Alignment guide lines overlay */}
+      {guides.length > 0 && (
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+          preserveAspectRatio="none"
+          style={{ zIndex: topZ - 1 }}
+        >
+          {guides.map((g, i) =>
+            g.orientation === "vertical" ? (
+              <line
+                key={`g-${i}`}
+                x1={g.position}
+                y1={g.start}
+                x2={g.position}
+                y2={g.end}
+                stroke="#3b82f6"
+                strokeWidth="1.5"
+                strokeDasharray="6 3"
+                opacity="0.7"
+              />
+            ) : (
+              <line
+                key={`g-${i}`}
+                x1={g.start}
+                y1={g.position}
+                x2={g.end}
+                y2={g.position}
+                stroke="#3b82f6"
+                strokeWidth="1.5"
+                strokeDasharray="6 3"
+                opacity="0.7"
+              />
+            ),
+          )}
+        </svg>
+      )}
 
       {/* Single-select floating toolbar */}
       {singleSelected &&

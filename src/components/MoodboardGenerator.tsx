@@ -22,6 +22,7 @@ import {
   rescaleImages,
   templatePreviewSvg,
 } from "@/lib/templates";
+import { autoLayout, LAYOUT_STYLES, type LayoutStyle } from "@/lib/auto-layout";
 import InteractiveCanvas from "./InteractiveCanvas";
 import ImageLibrary from "./ImageLibrary";
 import { FirstTimeModal } from "./FirstTimeModal";
@@ -336,6 +337,7 @@ export default function MoodboardGenerator() {
   // UI panels
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showLayoutPicker, setShowLayoutPicker] = useState(false);
   const [templateNameDraft, setTemplateNameDraft] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [extractedColors, setExtractedColors] = useState<string[]>([]);
@@ -1031,6 +1033,19 @@ export default function MoodboardGenerator() {
           </button>
 
           <button
+            onClick={() => setShowLayoutPicker(true)}
+            className="flex h-8 items-center gap-1 rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="4" rx="1" />
+              <rect x="14" y="10" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="4" rx="1" />
+            </svg>
+            Layout
+          </button>
+
+          <button
             onClick={() => setView("library")}
             className="flex h-8 items-center rounded px-2 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
           >
@@ -1239,6 +1254,54 @@ export default function MoodboardGenerator() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Auto-layout bottom sheet */}
+        {showLayoutPicker && (
+          <div
+            className="fixed inset-0 z-50 flex flex-col justify-end"
+            onClick={() => setShowLayoutPicker(false)}
+          >
+            <div className="flex-1 bg-black/15 dark:bg-black/40" />
+            <div
+              className="max-h-[65vh] overflow-y-auto rounded-t-xl bg-white dark:bg-neutral-800 px-4 pb-6 pt-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-neutral-300 dark:bg-neutral-600" />
+              <p className="mb-3 text-[11px] uppercase tracking-widest text-neutral-400">
+                Auto Layout
+              </p>
+              {canvasImages.length === 0 ? (
+                <p className="py-4 text-center text-xs text-neutral-400">
+                  Add images to the canvas first
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                  {LAYOUT_STYLES.map((ls) => (
+                    <button
+                      key={ls.id}
+                      onClick={() => {
+                        commitSnapshot();
+                        setCanvasImages(
+                          autoLayout(canvasImages, dims.w, dims.h, ls.id),
+                        );
+                        setShowLayoutPicker(false);
+                      }}
+                      className="flex flex-col items-center gap-1.5 rounded-lg border border-neutral-100 dark:border-neutral-700 p-3 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/50 active:bg-neutral-100 dark:active:bg-neutral-700"
+                    >
+                      <span className="text-xl leading-none">{ls.icon}</span>
+                      <span className="text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+                        {ls.name}
+                      </span>
+                      <span className="text-[9px] text-neutral-400 leading-tight text-center">
+                        {ls.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
