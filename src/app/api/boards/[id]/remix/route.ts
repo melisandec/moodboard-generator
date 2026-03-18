@@ -34,15 +34,34 @@ export async function POST(
       );
     }
 
-    // Get current user info
-    const currentUser = await db
+    // Get current user info, creating a placeholder if not yet synced
+    let currentUser = await db
       .select()
       .from(users)
       .where(eq(users.fid, fid))
       .get();
 
     if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      const now = new Date();
+      try {
+        await db.insert(users).values({
+          fid,
+          username: "",
+          pfpUrl: "",
+          bio: "",
+          socialLinks: {},
+          followerCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+        currentUser = await db.select().from(users).where(eq(users.fid, fid)).get();
+      } catch {
+        // Concurrent insert — re-fetch
+        currentUser = await db.select().from(users).where(eq(users.fid, fid)).get();
+      }
+      if (!currentUser) {
+        return NextResponse.json({ error: "Failed to initialize user" }, { status: 500 });
+      }
     }
 
     // Build edit history: original history + new editor

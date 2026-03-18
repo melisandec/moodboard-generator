@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { moodboards, activities, users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import type { CanvasImage } from "@/lib/storage";
+import type { CloudCanvasImage } from "@/lib/schema";
 
 interface CreateBoardRequest {
   title: string;
@@ -148,11 +149,11 @@ export async function POST(req: NextRequest) {
 
     // ====== Create Board ======
     const now = new Date();
-    const boardId = `board_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const boardId = `board_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     console.log("[/api/boards/create] Generated board ID:", boardId);
 
     // Convert CanvasImage[] (with dataUrl) to storage format (imageHash placeholder)
-    const canvasStateForStorage = body.canvasState.map((img) => ({
+    const canvasStateForStorage: CloudCanvasImage[] = body.canvasState.map((img) => ({
       id: img.id,
       imageHash: img.id, // Use id as placeholder for imageHash
       x: img.x,
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
         fid,
         title: body.title.trim(),
         caption: body.caption || "",
-        canvasState: canvasStateForStorage as any,
+        canvasState: canvasStateForStorage,
         canvasWidth: body.canvasWidth,
         canvasHeight: body.canvasHeight,
         background: body.background,
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest) {
       await db
         .insert(activities)
         .values({
-          id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `activity_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
           fid,
           type: "board_created",
           boardId,

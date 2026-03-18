@@ -36,6 +36,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'File too large (max 15 MB)' }, { status: 413 });
     }
 
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP' }, { status: 415 });
+    }
+
     const db = getDb();
 
     const existing = await db.select().from(images).where(eq(images.hash, hash)).get();
@@ -58,6 +63,7 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: { Authorization: `Bearer ${pinataJwt}` },
       body: pinataForm,
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!pinataRes.ok) {

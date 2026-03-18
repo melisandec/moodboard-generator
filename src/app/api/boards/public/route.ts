@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { moodboards, users, images } from "@/lib/schema";
-import { eq, desc, like, or, sql, inArray } from "drizzle-orm";
+import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { checkOrigin, originDenied } from "@/lib/auth";
 import type { CloudCanvasImage } from "@/lib/schema";
@@ -31,15 +31,28 @@ async function queryPublicBoards(options: {
       break;
   }
 
-  const whereClause = eq(moodboards.isPublic, true);
+  const searchTerm = search ? `%${search.toLowerCase()}%` : null;
+  const searchCondition = searchTerm
+    ? sql`(
+        lower(${moodboards.title}) LIKE ${searchTerm} OR
+        lower(${moodboards.caption}) LIKE ${searchTerm} OR
+        lower(${users.username}) LIKE ${searchTerm} OR
+        lower(cast(${moodboards.categories} as text)) LIKE ${searchTerm}
+      )`
+    : undefined;
+
+  const whereClause = searchCondition
+    ? and(eq(moodboards.isPublic, true), searchCondition)
+    : eq(moodboards.isPublic, true);
 
   const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(moodboards)
+    .leftJoin(users, eq(moodboards.fid, users.fid))
     .where(whereClause)
     .get();
 
-  let total = countResult?.count ?? 0;
+  const total = countResult?.count ?? 0;
 
   const rows = await db
     .select({
@@ -69,20 +82,7 @@ async function queryPublicBoards(options: {
     .limit(limit)
     .offset(offset);
 
-  let filteredRows = rows;
-  if (search) {
-    const q = search.toLowerCase();
-    filteredRows = rows.filter(
-      (r) =>
-        r.title?.toLowerCase().includes(q) ||
-        r.caption?.toLowerCase().includes(q) ||
-        r.username?.toLowerCase().includes(q) ||
-        ((r.categories as string[]) ?? []).some((c: string) =>
-          c.toLowerCase().includes(q),
-        ),
-    );
-    total = filteredRows.length;
-  }
+  const filteredRows = rows;
 
   const allHashes = new Set<string>();
   for (const row of filteredRows) {

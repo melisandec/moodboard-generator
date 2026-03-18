@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const fid = authResult.fid.toString();
     const db = getDb();
-    const page = parseInt(request.nextUrl.searchParams.get("page") || "1");
+    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1"));
     const limit = Math.min(
       parseInt(request.nextUrl.searchParams.get("limit") || "20"),
       100,

@@ -45,6 +45,8 @@ export const moodboards = sqliteTable(
     likeCount: integer("like_count").default(0), // Aggregate like count from reactions
     lastRemixAt: integer("last_remix_at", { mode: "timestamp" }),
     remixOfId: text("remix_of_id"),
+    mintTxHash: text("mint_tx_hash"),
+    mintContractAddress: text("mint_contract_address"),
     folderId: text("folder_id").references(() => folders.id),
     previewUrl: text("preview_url"),
     publishedAt: integer("published_at", { mode: "timestamp" }),

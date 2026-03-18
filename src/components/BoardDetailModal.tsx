@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 import type { PublicBoardDetail } from "@/lib/cloud";
 import type { EditHistoryEntry } from "@/lib/storage";
 import { formatAttribution } from "@/lib/canvas";
+import MintButton from "./MintButton";
 
 interface BoardDetailModalProps {
   boardId: string;
@@ -107,6 +109,24 @@ export default function BoardDetailModal({
     onEditPublished(boardId);
     onClose();
   }, [boardId, onClose, onEditPublished]);
+
+  const handleShare = useCallback(async () => {
+    if (!board) return;
+    const appDomain =
+      process.env.NEXT_PUBLIC_APP_DOMAIN || "moodboard-generator-phi.vercel.app";
+    const appUrl = appDomain.startsWith("http") ? appDomain : `https://${appDomain}`;
+    const boardUrl = `${appUrl}/viewer/${boardId}`;
+    const text = `Check out "${board.title}" 🎨`;
+    try {
+      // Open Farcaster cast composer with the board URL embedded as a Frame
+      await sdk.actions.openUrl(
+        `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(boardUrl)}`,
+      );
+    } catch {
+      // Fallback: copy URL to clipboard
+      await navigator.clipboard.writeText(boardUrl).catch(() => {});
+    }
+  }, [board, boardId]);
 
   // Close on escape
   useEffect(() => {
@@ -327,7 +347,7 @@ export default function BoardDetailModal({
                     onClick={handleEditPublished}
                     className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-200 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-600"
                   >
-                    ✏️ Edit published board
+                    ✏️ Edit
                   </button>
                 )}
                 <button
@@ -341,10 +361,34 @@ export default function BoardDetailModal({
                       Remixing…
                     </>
                   ) : (
-                    <>🔀 Remix this board</>
+                    <>🔀 Remix</>
                   )}
                 </button>
+                <button
+                  onClick={handleShare}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-200 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-600"
+                  title="Share as Farcaster Frame"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                    <polyline points="16 6 12 2 8 6"/>
+                    <line x1="12" y1="2" x2="12" y2="15"/>
+                  </svg>
+                  Cast
+                </button>
               </div>
+
+              {/* Mint on Base — only shown to the board owner */}
+              {isOwner && (
+                <div className="mt-3">
+                  <MintButton
+                    boardId={boardId}
+                    boardTitle={board.title}
+                    existingTxHash={(board as PublicBoardDetail & { mintTxHash?: string }).mintTxHash}
+                    existingContract={(board as PublicBoardDetail & { mintContractAddress?: string }).mintContractAddress}
+                  />
+                </div>
+              )}
 
               {!isAuthenticated && (
                 <p className="mt-2 text-center text-[10px] text-neutral-400">

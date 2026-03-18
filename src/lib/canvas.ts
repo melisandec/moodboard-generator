@@ -1,4 +1,9 @@
-import type { CanvasImage, EditHistoryEntry, ImageStyle, CropSettings } from "./storage";
+import type {
+  CanvasImage,
+  EditHistoryEntry,
+  ImageStyle,
+  CropSettings,
+} from "./storage";
 import { DEFAULT_IMAGE_STYLE } from "./storage";
 
 interface Placement {
@@ -301,7 +306,10 @@ export async function compressForStorage(
         naturalHeight: h,
       });
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
     img.src = url;
   });
 }
@@ -512,8 +520,7 @@ function drawStyledImage(
   const hh = h / 2;
 
   // Border radius in px
-  const borderR =
-    (st.borderRadius / 100) * Math.min(w, h) / 2;
+  const borderR = ((st.borderRadius / 100) * Math.min(w, h)) / 2;
 
   // Build a rounded-rect path used for clipping and border
   const buildRoundedRect = () => {
@@ -537,10 +544,7 @@ function drawStyledImage(
     ctx.fillStyle = "#ffffff";
     // Slightly wider rect behind the image for the margin
     ctx.save();
-    ctx.scale(
-      (w + marginPx * 2) / w,
-      (h + marginPx * 2) / h,
-    );
+    ctx.scale((w + marginPx * 2) / w, (h + marginPx * 2) / h);
     buildRoundedRect();
     ctx.fill();
     ctx.restore();
@@ -558,8 +562,8 @@ function drawStyledImage(
   // Crop works like CSS: zoom scales the image larger, then offsets pan.
   const imgW = w * crop.zoom;
   const imgH = h * crop.zoom;
-  const imgX = -hw + (crop.offsetX * imgW) - ((crop.zoom - 1) / 2) * w;
-  const imgY = -hh + (crop.offsetY * imgH) - ((crop.zoom - 1) / 2) * h;
+  const imgX = -hw + crop.offsetX * imgW - ((crop.zoom - 1) / 2) * w;
+  const imgY = -hh + crop.offsetY * imgH - ((crop.zoom - 1) / 2) * h;
   ctx.drawImage(el, imgX, imgY, imgW, imgH);
 
   ctx.restore(); // unclip
