@@ -8,8 +8,8 @@ export default async function CreatorProfilePage({
   const { fid } = await params;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
+      <div className="mx-auto max-w-xl px-0 sm:px-4 py-6">
         <CreatorProfile fid={fid} />
       </div>
     </div>
