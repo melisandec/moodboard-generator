@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
 // ---------------------------------------------------------------------------
@@ -169,13 +168,11 @@ function SpotlightBoard({ board }: { board: Board }) {
       style={{ aspectRatio: "4/3" }}
     >
       {board.previewUrl ? (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={board.previewUrl}
           alt={board.title}
-          fill
-          sizes="100vw"
-          priority
-          className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
         />
       ) : (
         <div className="absolute inset-0 bg-neutral-100 dark:bg-neutral-800" />
@@ -220,12 +217,11 @@ function BoardCard({ board, index }: { board: Board; index: number }) {
       }}
     >
       {board.previewUrl ? (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={board.previewUrl}
           alt={board.title}
-          fill
-          sizes="50vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
       ) : (
         <div className="absolute inset-0 bg-neutral-100 dark:bg-neutral-800" />
@@ -377,7 +373,8 @@ export default function CreatorProfile({ fid }: { fid: string }) {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative h-16 w-16 rounded-full overflow-hidden ring-[2.5px] ring-white/20 shadow-xl shadow-black/40">
             {profile.pfpUrl ? (
-              <Image src={profile.pfpUrl} alt={profile.username ?? ""} fill className="object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.pfpUrl} alt={profile.username ?? ""} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
               <div className="absolute inset-0" style={{ background: gradient }} />
             )}

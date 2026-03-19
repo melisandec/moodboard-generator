@@ -139,6 +139,7 @@ export async function GET(
         title: moodboards.title,
         previewUrl: moodboards.previewUrl,
         viewCount: moodboards.viewCount,
+        editCount: moodboards.editCount,
         isPublic: moodboards.isPublic,
         publishedAt: moodboards.publishedAt,
         createdAt: moodboards.createdAt,
@@ -223,9 +224,11 @@ export async function GET(
       socialLinks: (userData.socialLinks as Record<string, string>) || {},
       followerCount: userData.followerCount || 0,
       stats: {
-        totalBoardsPublished: stats[0]?.totalBoardsPublished || 0,
-        totalViews: stats[0]?.totalViews || 0,
-        totalRemixes: stats[0]?.totalRemixes || 0,
+        // Compute live from actual board data — the userStats table is a
+        // denormalised cache that is often stale or unpopulated.
+        totalBoardsPublished: allBoards.filter((b) => b.isPublic).length,
+        totalViews: allBoards.reduce((sum, b) => sum + (b.viewCount ?? 0), 0),
+        totalRemixes: allBoards.reduce((sum, b) => sum + (b.editCount ?? 0), 0),
       },
       recentBoards: recentBoards.map((b: any) => {
         let previewImages: Array<{
