@@ -68,6 +68,8 @@ export function useAutoSave(config: AutoSaveConfig) {
           img.rotation,
           img.zIndex,
           img.pinned,
+          img.style,
+          img.crop,
         ]),
         orientation,
         bgColor,

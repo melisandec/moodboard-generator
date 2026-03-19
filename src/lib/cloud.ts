@@ -28,6 +28,38 @@ interface CloudCanvasImage {
 
 const MAX_CONCURRENCY = 3;
 
+// ---------------------------------------------------------------------------
+// Client-side IPFS URL cache — avoids re-compressing + re-uploading images
+// that are already stored on IPFS. Maps imageHash → IPFS URL.
+// ---------------------------------------------------------------------------
+const IPFS_CACHE_KEY = "moodboard-ipfs-cache";
+const IPFS_CACHE_MAX = 2000;
+
+function getIpfsCache(): Map<string, string> {
+  try {
+    const raw = localStorage.getItem(IPFS_CACHE_KEY);
+    return raw ? new Map(Object.entries(JSON.parse(raw))) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
+function saveIpfsCache(cache: Map<string, string>): void {
+  try {
+    const entries = [...cache.entries()];
+    const trimmed =
+      entries.length > IPFS_CACHE_MAX
+        ? entries.slice(entries.length - IPFS_CACHE_MAX)
+        : entries;
+    localStorage.setItem(
+      IPFS_CACHE_KEY,
+      JSON.stringify(Object.fromEntries(trimmed)),
+    );
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 async function runConcurrent<T>(
   tasks: (() => Promise<T>)[],
   concurrency = MAX_CONCURRENCY,
@@ -172,9 +204,22 @@ export async function pushToCloud(
     }
   }
 
-  // Upload images in parallel (max concurrency)
+  // Upload images in parallel (max concurrency).
+  // Skip images already known to be on IPFS (cached from a previous sync).
+  const ipfsCache = getIpfsCache();
   const imageUrlByHash = new Map<string, string>();
-  const uploadEntries = [...uniqueImages.entries()];
+
+  // Pre-populate from cache
+  for (const [hash] of uniqueImages) {
+    if (ipfsCache.has(hash)) {
+      imageUrlByHash.set(hash, ipfsCache.get(hash)!);
+    }
+  }
+
+  const uploadEntries = [...uniqueImages.entries()].filter(
+    ([hash]) => !imageUrlByHash.has(hash),
+  );
+  const newlyUploaded: Array<[string, string]> = [];
   const uploadTasks = uploadEntries.map(
     ([hash, { dataUrl, nw, nh }]) =>
       async () => {
@@ -187,10 +232,17 @@ export async function pushToCloud(
           fetchFn,
         );
         imageUrlByHash.set(hash, url);
+        newlyUploaded.push([hash, url]);
         return url;
       },
   );
   await runConcurrent(uploadTasks);
+
+  // Persist newly obtained IPFS URLs so future pushes can skip compression
+  if (newlyUploaded.length > 0) {
+    for (const [hash, url] of newlyUploaded) ipfsCache.set(hash, url);
+    saveIpfsCache(ipfsCache);
+  }
 
   const boards = toPush.map((aw) => ({
     id: aw.id,
@@ -246,7 +298,11 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
   return blobToDataUrl(blob);
 }
 
-export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
+export async function pullFromCloud(
+  fetchFn: FetchFn,
+  /** hash → dataUrl for images already stored locally — skips IPFS re-downloads */
+  localImageCache?: Map<string, string>,
+): Promise<Artwork[]> {
   const res = await fetchFn("/api/sync");
   if (!res.ok) {
     console.error(
@@ -295,7 +351,17 @@ export async function pullFromCloud(fetchFn: FetchFn): Promise<Artwork[]> {
   }
 
   const dataUrlCache = new Map<string, string>();
-  const fetchTasks = [...uniqueHashes].map((hash) => async () => {
+
+  // Pre-populate from local IndexedDB cache — avoids re-downloading from IPFS
+  for (const hash of uniqueHashes) {
+    if (localImageCache?.has(hash)) {
+      dataUrlCache.set(hash, localImageCache.get(hash)!);
+    }
+  }
+
+  // Only fetch hashes not already available locally
+  const uncachedHashes = [...uniqueHashes].filter((h) => !dataUrlCache.has(h));
+  const fetchTasks = uncachedHashes.map((hash) => async () => {
     const url = imageMap[hash].url;
     const dataUrl = await fetchImageAsDataUrl(url);
     dataUrlCache.set(hash, dataUrl);

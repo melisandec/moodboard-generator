@@ -213,7 +213,20 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
           await pushToCloud(artworksToPush, authFetch, since);
         }
 
-        const cloudArtworks = await pullFromCloud(authFetch);
+        // Build hash → dataUrl map from local artworks so pullFromCloud can
+        // skip re-downloading images already stored in IndexedDB
+        const { imageHash } = await import("@/lib/storage");
+        const localImageCache = new Map<string, string>();
+        for (const aw of localArtworks) {
+          for (const img of aw.images) {
+            const hash = imageHash(img.dataUrl);
+            if (!localImageCache.has(hash)) {
+              localImageCache.set(hash, img.dataUrl);
+            }
+          }
+        }
+
+        const cloudArtworks = await pullFromCloud(authFetch, localImageCache);
         for (const aw of cloudArtworks) {
           await saveArtwork(aw);
         }
