@@ -27,6 +27,7 @@ import InteractiveCanvas from "./InteractiveCanvas";
 import ImageLibrary from "./ImageLibrary";
 import { FirstTimeModal } from "./FirstTimeModal";
 import { BoardCreationWizard } from "./BoardCreationWizard";
+import BoardDetailModal from "./BoardDetailModal";
 import { useCloud } from "./CloudProvider";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -347,6 +348,7 @@ export default function MoodboardGenerator() {
 
   // Board Creation Wizard
   const [showWizard, setShowWizard] = useState(false);
+  const [createdBoardId, setCreatedBoardId] = useState<string | null>(null);
 
   // Collection pagination – show only 4 boards initially
   const [showAllCollection, setShowAllCollection] = useState(false);
@@ -364,7 +366,7 @@ export default function MoodboardGenerator() {
   const { undoStack, redoStack, commitSnapshot, undo, redo, clearHistory } =
     useUndoRedo(canvasImages, setCanvasImages);
 
-  const { draftIndicator, pendingDraft, dismissDraft, consumeDraft } =
+  const { draftIndicator, pendingDraft, dismissDraft, consumeDraft, clearCurrentDraft } =
     useAutoSave({
       view,
       title,
@@ -1976,8 +1978,9 @@ export default function MoodboardGenerator() {
           onCancel={() => setShowWizard(false)}
           onComplete={(boardId) => {
             setShowWizard(false);
-            // Optional: show success message or redirect to board
-            console.log("Board created:", boardId);
+            setCreatedBoardId(boardId);
+            clearCurrentDraft();
+            cloudSync().then(() => refreshCollection()).catch(() => {});
           }}
           canvasImages={canvasImages}
           title={title}
@@ -1990,6 +1993,31 @@ export default function MoodboardGenerator() {
           canvasHeight={dims.h}
           remixOfId={remixOfId}
           moodboardUrl={moodboardUrl}
+        />
+      )}
+
+      {/* Board detail modal — opens immediately after creation so user sees their board without leaving the canvas */}
+      {createdBoardId && (
+        <BoardDetailModal
+          boardId={createdBoardId}
+          onClose={() => setCreatedBoardId(null)}
+          onRemix={(remixBoardId) => {
+            setCreatedBoardId(null);
+            // trigger remix flow via URL param
+            const url = new URL(window.location.href);
+            url.searchParams.set("remix", remixBoardId);
+            window.history.pushState({}, "", url);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }}
+          onEditPublished={(editBoardId) => {
+            setCreatedBoardId(null);
+            const url = new URL(window.location.href);
+            url.searchParams.set("editPublished", editBoardId);
+            window.history.pushState({}, "", url);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }}
+          isAuthenticated={!!cloudUser}
+          viewerFid={cloudUser?.fid}
         />
       )}
     </div>

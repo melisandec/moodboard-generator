@@ -38,19 +38,7 @@ export function BoardCreationWizard({
   remixOfId,
   moodboardUrl,
 }: BoardCreationWizardProps) {
-  const {
-    step,
-    isCreating,
-    creationError,
-    createdBoardId,
-    progressPercent,
-    createBoard,
-    nextStep,
-    prevStep,
-    resetWizard,
-    setStep,
-  } = useBoardCreationWizard();
-
+  const { isCreating, creationError, createBoard } = useBoardCreationWizard();
   const [publishImmediately, setPublishImmediately] = useState(false);
 
   const boardData = useMemo<BoardCreationData>(
@@ -69,407 +57,156 @@ export function BoardCreationWizard({
       remixOfId,
     }),
     [
-      initialData,
-      title,
-      caption,
-      canvasImages,
-      canvasWidth,
-      canvasHeight,
-      bgColor,
-      orientation,
-      imageMargin,
-      categories,
-      moodboardUrl,
-      remixOfId,
+      initialData, title, caption, canvasImages, canvasWidth, canvasHeight,
+      bgColor, orientation, imageMargin, categories, moodboardUrl, remixOfId,
     ],
   );
 
-  const handleCreateAndPublish = async () => {
+  const handleSave = async () => {
     const result = await createBoard(boardData, publishImmediately);
     if (result.success) {
-      setStep("complete");
       onComplete?.(result.boardId);
     }
   };
 
-  // =====================================================================
-  // Step: Details
-  // =====================================================================
+  const previewImages = canvasImages.slice(0, 4);
 
-  if (step === "details") {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-        <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
-          <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
-            Board Details
-          </h2>
-          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Step 1 of 3 • {progressPercent}%
-          </p>
+  return (
+    // Backdrop
+    <div
+      className="fixed inset-0 z-[9999] flex items-end justify-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isCreating) onCancel?.(); }}
+    >
+      {/* Bottom sheet */}
+      <div className="w-full max-w-lg rounded-t-3xl bg-white dark:bg-neutral-900 shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-neutral-200 dark:bg-neutral-700" />
+        </div>
 
-          {/* Progress Bar */}
-          <div className="mb-4 h-1 w-full rounded-full bg-neutral-200 dark:bg-neutral-700">
-            <div
-              className="h-full rounded-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          {/* Title */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              Title *
-            </label>
-            <input
-              type="text"
-              value={boardData.title}
-              maxLength={80}
-              placeholder="Enter board title"
-              title="Board title"
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-              disabled
-            />
-            <p className="mt-1 text-xs text-neutral-400">
-              {boardData.title.length}/80
-            </p>
-          </div>
-
-          {/* Caption */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              Caption
-            </label>
-            <textarea
-              value={boardData.caption}
-              maxLength={280}
-              rows={3}
-              placeholder="Add a caption (optional)"
-              title="Board caption"
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-              disabled
-            />
-            <p className="mt-1 text-xs text-neutral-400">
-              {boardData.caption.length}/280
-            </p>
-          </div>
-
-          {/* Error */}
-          {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
-                Error
-              </p>
-              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
-                {creationError}
-              </p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-3">
+        <div className="px-5 pb-8">
+          {/* Header */}
+          <div className="flex items-center justify-between pt-2 pb-4">
+            <h2 className="text-base font-semibold text-neutral-900 dark:text-white">
+              Save board
+            </h2>
             <button
               onClick={onCancel}
-              className="flex-1 rounded border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
+              disabled={isCreating}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 transition-colors"
             >
-              Cancel
-            </button>
-            <button
-              onClick={nextStep}
-              className="flex-1 rounded bg-blue-500 py-2 text-sm font-medium text-white hover:bg-blue-600"
-            >
-              Next
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
-        </div>
-      </div>
-    );
-  }
 
-  // =====================================================================
-  // Step: Preview
-  // =====================================================================
-
-  if (step === "preview") {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-        <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
-          <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
-            Preview
-          </h2>
-          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Step 2 of 3 • {progressPercent}%
-          </p>
-
-          {/* Progress Bar */}
-          <div className="mb-4 h-1 w-full rounded-full bg-neutral-200 dark:bg-neutral-700">
-            {/* eslint-disable-next-line @next/next/no-style-components-in-document */}
-            <div
-              className="h-full rounded-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progressPercent}%` } as React.CSSProperties}
-            />
-          </div>
-
-          {/* Preview Image */}
-          <div className="mb-4 rounded-lg overflow-hidden bg-neutral-100 dark:bg-neutral-700">
+          {/* Preview */}
+          <div
+            className="mb-4 w-full rounded-2xl overflow-hidden"
+            style={{
+              background: bgColor || "#f5f5f4",
+              aspectRatio: canvasWidth && canvasHeight ? `${canvasWidth}/${canvasHeight}` : "3/4",
+              maxHeight: "220px",
+            }}
+          >
             {moodboardUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={moodboardUrl}
-                alt="Board preview"
-                className="w-full object-cover"
-              />
-            ) : canvasImages.length > 0 ? (
-              <div className="grid grid-cols-2 gap-1 p-2 h-48">
-                {canvasImages.slice(0, 4).map((img) => (
-                  <div
-                    key={img.id}
-                    className="relative overflow-hidden rounded bg-neutral-200 dark:bg-neutral-600"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.dataUrl}
-                      alt="Canvas preview"
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
+              <img src={moodboardUrl} alt="Board preview" className="w-full h-full object-cover" />
+            ) : previewImages.length > 0 ? (
+              <div
+                className="grid h-full w-full gap-0.5 p-1"
+                style={{ gridTemplateColumns: previewImages.length === 1 ? "1fr" : "1fr 1fr" }}
+              >
+                {previewImages.map((img) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={img.id} src={img.dataUrl} alt="" className="h-full w-full object-cover rounded-xl" />
                 ))}
               </div>
             ) : (
-              <div className="flex h-48 items-center justify-center text-neutral-400">
-                No preview available
+              <div className="flex h-full items-center justify-center text-neutral-300 dark:text-neutral-600 text-sm">
+                No preview
               </div>
             )}
           </div>
 
-          {/* Board Info */}
-          <div className="mb-4 space-y-2 text-sm">
-            <div>
-              <p className="text-neutral-500 dark:text-neutral-400">Title</p>
-              <p className="font-medium text-neutral-900 dark:text-white">
-                {boardData.title}
-              </p>
-            </div>
-            <div>
-              <p className="text-neutral-500 dark:text-neutral-400">Images</p>
-              <p className="font-medium text-neutral-900 dark:text-white">
-                {canvasImages.length} image
-                {canvasImages.length !== 1 ? "s" : ""}
-              </p>
-            </div>
-            {boardData.categories.length > 0 && (
-              <div>
-                <p className="text-neutral-500 dark:text-neutral-400">
-                  Categories
-                </p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {boardData.categories.map((cat) => (
-                    <span
-                      key={cat}
-                      className="inline-block rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                    >
-                      {cat}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+          {/* Board info */}
+          <div className="mb-5">
+            <p className="text-[15px] font-semibold text-neutral-900 dark:text-white leading-snug line-clamp-1">
+              {boardData.title || "Untitled"}
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+              {canvasImages.length} image{canvasImages.length !== 1 ? "s" : ""}
+              {categories.length > 0 && ` · ${categories[0]}${categories.length > 1 ? ` +${categories.length - 1}` : ""}`}
+            </p>
           </div>
 
-          {/* Error */}
-          {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
-                Error
-              </p>
-              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
-                {creationError}
-              </p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-3">
+          {/* Publish toggle */}
+          <div className="mb-5 flex rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
             <button
-              onClick={prevStep}
-              className="flex-1 rounded border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
-            >
-              Back
-            </button>
-            <button
-              onClick={nextStep}
-              className="flex-1 rounded bg-blue-500 py-2 text-sm font-medium text-white hover:bg-blue-600"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // =====================================================================
-  // Step: Publish
-  // =====================================================================
-
-  if (step === "publish") {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-        <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
-          <h2 className="mb-1 text-xl font-semibold text-neutral-900 dark:text-white">
-            Publish Option
-          </h2>
-          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Step 3 of 3 • {progressPercent}%
-          </p>
-
-          {/* Progress Bar */}
-          <div className="mb-4 h-1 w-full rounded-full bg-neutral-200 dark:bg-neutral-700">
-            {/* eslint-disable-next-line @next/next/no-style-components-in-document */}
-            {/* eslint-disable-next-line @next/next/no-style-components-in-document */}
-            <div
-              className="h-full rounded-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progressPercent}%` } as React.CSSProperties}
-            />
-          </div>
-
-          {/* Publish Options */}
-          <div className="mb-4 space-y-3">
-            <label className="flex items-center gap-3 rounded-lg border-2 border-blue-200 bg-blue-50 p-3 cursor-pointer dark:border-blue-900/30 dark:bg-blue-900/20">
-              <input
-                type="radio"
-                checked={!publishImmediately}
-                onChange={() => setPublishImmediately(false)}
-                className="h-4 w-4"
-              />
-              <div>
-                <p className="font-medium text-neutral-900 dark:text-white">
-                  Save as Draft
-                </p>
-                <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                  Keep private and publish later
-                </p>
-              </div>
-            </label>
-
-            <label className="flex items-center gap-3 rounded-lg border-2 border-green-200 bg-green-50 p-3 cursor-pointer dark:border-green-900/30 dark:bg-green-900/20">
-              <input
-                type="radio"
-                checked={publishImmediately}
-                onChange={() => setPublishImmediately(true)}
-                className="h-4 w-4"
-              />
-              <div>
-                <p className="font-medium text-neutral-900 dark:text-white">
-                  Publish Now
-                </p>
-                <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                  Make public and share with community
-                </p>
-              </div>
-            </label>
-          </div>
-
-          {/* Error */}
-          {creationError && (
-            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-              <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
-                Error
-              </p>
-              <p className="text-sm text-red-600 dark:text-red-400 break-words whitespace-normal max-w-full">
-                {creationError}
-              </p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={prevStep}
+              onClick={() => setPublishImmediately(false)}
               disabled={isCreating}
-              className="flex-1 rounded border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                !publishImmediately
+                  ? "bg-neutral-900 dark:bg-white text-white dark:text-neutral-900"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
             >
-              Back
+              Save as draft
             </button>
             <button
-              onClick={handleCreateAndPublish}
+              onClick={() => setPublishImmediately(true)}
               disabled={isCreating}
-              className="flex-1 rounded bg-blue-500 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                publishImmediately
+                  ? "bg-neutral-900 dark:bg-white text-white dark:text-neutral-900"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
             >
-              {isCreating ? "Creating..." : "Create Board"}
+              Publish now
             </button>
           </div>
-        </div>
-      </div>
-    );
-  }
 
-  // =====================================================================
-  // Step: Complete
-  // =====================================================================
-
-  if (step === "complete") {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-        <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-neutral-800 shadow-lg">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 mx-auto">
-            <svg
-              className="h-8 w-8 text-green-600 dark:text-green-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-
-          <h2 className="mb-2 text-center text-xl font-semibold text-neutral-900 dark:text-white">
-            Success!
-          </h2>
-          <p className="mb-4 text-center text-sm text-neutral-600 dark:text-neutral-400">
+          {/* Publish explanation */}
+          <p className="mb-5 text-xs text-neutral-400 dark:text-neutral-600 text-center">
             {publishImmediately
-              ? "Your board has been published and is now visible to the community!"
-              : "Your board has been saved as a draft. You can edit and publish it later."}
+              ? "Visible to the community in the public feed"
+              : "Only you can see this — publish any time"}
           </p>
 
-          {/* Progress Bar at 100% */}
-          <div className="mb-6 h-1 w-full rounded-full bg-neutral-200 dark:bg-neutral-700">
-            {/* eslint-disable-next-line @next/next/no-style-components-in-document */}
-            <div
-              className="h-full rounded-full bg-blue-500"
-              style={{ width: "100%" } as React.CSSProperties}
-            />
-          </div>
+          {/* Error */}
+          {creationError && (
+            <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2.5">
+              <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">
+                {creationError}
+              </p>
+            </div>
+          )}
 
-          {/* Actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                resetWizard();
-                onCancel?.();
-              }}
-              className="flex-1 rounded border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
-            >
-              Close
-            </button>
-            <button
-              onClick={() => {
-                resetWizard();
-                onComplete?.(createdBoardId || "");
-              }}
-              className="flex-1 rounded bg-blue-500 py-2 text-sm font-medium text-white hover:bg-blue-600"
-            >
-              View Board
-            </button>
-          </div>
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            disabled={isCreating || canvasImages.length === 0}
+            className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #404040 100%)" }}
+          >
+            {isCreating ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+                </svg>
+                Saving…
+              </span>
+            ) : (
+              publishImmediately ? "Publish board" : "Save draft"
+            )}
+          </button>
         </div>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }
