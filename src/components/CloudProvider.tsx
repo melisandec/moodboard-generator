@@ -52,6 +52,7 @@ const STORAGE_USER_KEY = "moodboard-cloud-user";
 const STORAGE_SYNC_KEY = "moodboard-last-sync";
 
 let _isMiniApp: boolean | null = null;
+let _initDone = false; // Global init guard to prevent re-initialization across component remounts
 
 async function authFetch(
   input: RequestInfo | URL,
@@ -94,7 +95,6 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [isMiniApp, setIsMiniApp] = useState(false);
   const syncLock = useRef(false);
-  const initDone = useRef(false);
   const pendingAutoSync = useRef(false);
   const queuedSync = useRef<{
     localOverride?: Artwork[];
@@ -103,8 +103,8 @@ export function CloudProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   useEffect(() => {
-    if (initDone.current) return;
-    initDone.current = true;
+    if (_initDone) return;
+    _initDone = true;
 
     try {
       const stored = localStorage.getItem(STORAGE_USER_KEY);
